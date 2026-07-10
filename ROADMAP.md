@@ -2,7 +2,7 @@
 
 DunDrAI is a real-time multiplayer D&D platform with AI-driven Dungeon Masters and party members. This is a living, scannable index of implementation phases — for full architectural detail (stack choices, ADRs 1-8, diagrams), see [`project-plan.md`](./project-plan.md). This file tracks *what's next*, not *why*.
 
-**Status:** Phase 2 (Core Data Models) — ✅ done. Next up: Phase 3 (Real-Time Session Backbone).
+**Status:** Phase 3 (Real-Time Session Backbone) — ✅ done. Next up: Phase 4 (Character Sheets & Dice Roller).
 
 ---
 
@@ -61,17 +61,19 @@ DunDrAI is a real-time multiplayer D&D platform with AI-driven Dungeon Masters a
 
 ---
 
-## Phase 3 — Real-Time Session Backbone
+## Phase 3 — Real-Time Session Backbone ✅ DONE
 
 **Goal:** Stand up the Socket.io gateway that carries all in-game events, with authenticated, recoverable connections.
 
-**Key deliverables:**
-- Socket.io gateway with WebSocket handshake auth per ADR 2
-- Connection State Recovery on server + Zustand `sessionStorage` cache on client per ADR 6
-- REST vs WebSocket action split per ADR 1 (lobby creation over REST, game-loop events over WS)
-- Lobby creation and join flows
+**Done:**
+- Socket.io gateway (`GameSessionGateway`) with handshake auth middleware per ADR 2 (verifies the Supabase JWT via `TOKEN_VERIFIER`, lazily provisions the user per ADR 8, disconnects at token expiry so the client reconnects with a refreshed JWT)
+- Connection State Recovery on the server + Zustand `sessionStorage`-persisted session store on the client per ADR 6 (persists only `sessionId` + `lastMessageAt`; rejoin fetches messages via `since`)
+- REST vs WebSocket split per ADR 1: `POST/GET /sessions` for lobby setup; `session:join` / `chat:send` over WS with ack envelopes (`AckResponse<T>`), payloads parsed with shared Zod schemas per ADR 3
+- Shared WS contract in `packages/shared/src/ws-events.ts` (`WS_EVENTS`, `JoinSessionSchema`, wire payload types)
+- Lobby create/join flows, LobbyPage + SessionPage (FSD pages layer lives in `client/src/views/` — `src/pages/` would activate the legacy Next.js Pages Router)
+- Jest specs for service/gateway/store/hooks; protocol-level E2E verified (two clients, broadcast, catch-up)
 
-**Primary files/modules:** `server/src/game-session/`, `client/src/features/` (lobby, connection), `client/src/store/` (Zustand session store), `client/src/pages/` (LobbyPage, SessionPage)
+**Primary files/modules:** `server/src/game-session/`, `packages/shared/src/ws-events.ts`, `client/src/features/` (lobby, session-chat), `client/src/shared/` (socketClient, sessionStore), `client/src/views/` (LobbyPage, SessionPage)
 
 **Depends on:** Phase 1 (handshake auth needs JWT verification), Phase 2 (`CampaignSession` model must exist)
 
