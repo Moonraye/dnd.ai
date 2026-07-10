@@ -1,0 +1,89 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Mirrors Supabase Auth identities; rows are lazily created on first
+// authenticated request (ADR 8), so id comes from the Supabase JWT `sub`.
+model User {
+  id        String   @id @db.Uuid
+  email     String?  @unique
+  username  String?
+  createdAt DateTime @default(now())
+
+  campaignSessions CampaignSession[]
+  characterSheets  CharacterSheet[]
+}
+
+enum SessionStatus {
+  LOBBY
+  ACTIVE
+  COMPLETED
+}
+
+enum SenderType {
+  HUMAN
+  AI_DM
+  AI_PLAYER
+}
+
+model CampaignSession {
+  id        String        @id @default(uuid()) @db.Uuid
+  title     String
+  creatorId String        @db.Uuid
+  creator   User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  status    SessionStatus @default(LOBBY)
+  createdAt DateTime      @default(now())
+
+  characterSheets CharacterSheet[]
+  chatMessages    ChatMessage[]
+  gameStateLog    GameStateLog?
+
+  @@index([creatorId])
+}
+
+model CharacterSheet {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String          @db.Uuid
+  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId  String          @db.Uuid
+  session    CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name       String
+  hpCurrent  Int
+  hpMax      Int
+  stats      Json
+  inventory  Json            @default("[]")
+  aiProvider String? // ADR 4: e.g. "google"; null = human-controlled
+  aiModel    String? // ADR 4: e.g. "gemini-2.5-flash"
+
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id          String          @id @default(uuid()) @db.Uuid
+  sessionId   String          @db.Uuid
+  session     CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderType  SenderType
+  senderName  String
+  messageText String
+  createdAt   DateTime        @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+// One-to-one with CampaignSession (ADR 4: AI campaign memory).
+model GameStateLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  sessionId        String          @unique @db.Uuid
+  session          CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  activeQuests     Json            @default("[]")
+  npcRelationships Json            @default("{}")
+  campaignSummary  Json            @default("{}")
+  updatedAt        DateTime        @updatedAt
+}
