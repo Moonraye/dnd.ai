@@ -3,6 +3,7 @@
 import {
   WS_EVENTS,
   type AckResponse,
+  type CharacterSheetPayload,
   type ChatMessagePayload,
   type JoinSessionResult,
 } from '@dnd/shared';
@@ -22,6 +23,7 @@ const JOIN_ACK_TIMEOUT_MS = 5000;
 export function useSessionSocket(sessionId: string) {
   const session = useSessionStore((state) => state.session);
   const messages = useSessionStore((state) => state.messages);
+  const characters = useSessionStore((state) => state.characters);
   const joinStatus = useSessionStore((state) => state.joinStatus);
   const joinError = useSessionStore((state) => state.joinError);
 
@@ -49,6 +51,7 @@ export function useSessionSocket(sessionId: string) {
         }
         store.getState().setSessionInfo(response.data.session);
         store.getState().addMessages(response.data.messages);
+        store.getState().setCharacters(response.data.characters);
         store.getState().setJoinStatus('joined');
       } catch {
         store.getState().setJoinStatus('error', 'Connection timed out');
@@ -58,12 +61,15 @@ export function useSessionSocket(sessionId: string) {
     const onConnect = () => void join();
     const onChatMessage = (message: ChatMessagePayload) =>
       store.getState().addMessages([message]);
+    const onCharacterUpdated = (character: CharacterSheetPayload) =>
+      store.getState().upsertCharacter(character);
     const onDisconnect = () => store.getState().setJoinStatus('connecting');
     const onConnectError = () =>
       store.getState().setJoinStatus('error', 'Unable to connect');
 
     socket.on('connect', onConnect);
     socket.on(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
+    socket.on(WS_EVENTS.CHARACTER_UPDATED, onCharacterUpdated);
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
 
@@ -77,10 +83,11 @@ export function useSessionSocket(sessionId: string) {
       // disconnect here — StrictMode remounts would kill the live socket.
       socket.off('connect', onConnect);
       socket.off(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
+      socket.off(WS_EVENTS.CHARACTER_UPDATED, onCharacterUpdated);
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
     };
   }, [sessionId]);
 
-  return { session, messages, joinStatus, joinError };
+  return { session, messages, characters, joinStatus, joinError };
 }

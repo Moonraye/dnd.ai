@@ -2,7 +2,7 @@
 
 DunDrAI is a real-time multiplayer D&D platform with AI-driven Dungeon Masters and party members. This is a living, scannable index of implementation phases — for full architectural detail (stack choices, ADRs 1-8, diagrams), see [`project-plan.md`](./project-plan.md). This file tracks *what's next*, not *why*.
 
-**Status:** Phase 3 (Real-Time Session Backbone) — ✅ done. Next up: Phase 4 (Character Sheets & Dice Roller).
+**Status:** Phase 4 (Character Sheets & Dice Roller) — ✅ done. Next up: Phase 5 (AI Orchestration).
 
 ---
 
@@ -79,17 +79,19 @@ DunDrAI is a real-time multiplayer D&D platform with AI-driven Dungeon Masters a
 
 ---
 
-## Phase 4 — Character Sheets & Dice Roller
+## Phase 4 — Character Sheets & Dice Roller ✅ DONE
 
 **Goal:** Give players a persistent character HUD and a trustworthy way to roll dice inside the shared chat feed.
 
-**Key deliverables:**
-- Character sheet CRUD (create/update stats, HP, inventory)
-- Character HUD widget on the client
-- Server-side verified polyhedral dice roller (d4/d6/d8/d10/d12/d20/d100 + modifiers, e.g. `2d6 + 3`)
-- Dice roll results integrated into the chat feed
+**Done:**
+- Character sheet persistence (`CharacterSheetService` in `server/src/user/`): one human sheet per user per session enforced in-service; `POST /sessions/:sessionId/characters` REST create (controller in `game-session/` to avoid the `AuthModule↔UserModule` cycle); owner-only in-session updates via new `character:update` WS event broadcasting `character:updated`
+- Creation **gates** session entry (decision 2): `SessionPage` renders the creation form until the caller has a sheet. Three modes — manual, manual + 5e standard-array helper, and AI draft (`server/src/ai/` Gemini one-shot per ADR 4, `POST /ai/character-draft`, prefills the form; never persists directly)
+- Server-authoritative dice roller (`DiceService`, `crypto.randomInt`) with a shared multi-term grammar parser in `packages/shared/src/dice.ts` (`1d20+2d6-3`; d4/d6/d8/d10/d12/d20/d100 + modifiers; caps: ≤10 terms, ≤50 dice). Input via `DiceRollerPanel` **and** a `/roll` chat command, both emitting `dice:roll`
+- Dice results persist as `SenderType.SYSTEM` `ChatMessage`s with structured `metadata Json` (migration `system_messages`), broadcast on the normal `chat:message` path so ADR 6 catch-up/recovery is unchanged; rendered as a rich `DiceRollCard` (`client/src/entities/dice`)
+- `CharacterHUD` widget (own card with HP ± controls + inventory editor, live-updating read-only party strip) in a two-column desktop layout / mobile drawer
+- Jest specs for parser/dice/character services, gateway handlers, AI service, and client hooks/stores/UI; server (71) + client (55) suites green; Nest boots with all routes/WS events mapped
 
-**Primary files/modules:** `server/src/game-session/` (dice logic), `server/src/user/` (character sheet persistence), `client/src/widgets/` (CharacterHUD), `client/src/features/` (DiceRoller)
+**Primary files/modules:** `packages/shared/src/dice.ts`, `server/src/game-session/` (dice + WS handlers, `character-sheet.controller.ts`), `server/src/user/character-sheet.service.ts`, `server/src/ai/`, `client/src/features/{character-sheet,dice-roller}/`, `client/src/entities/dice/`, `client/src/widgets/character-hud/`, `client/src/views/session/`
 
 **Depends on:** Phase 2 (`CharacterSheet` model), Phase 3 (WS events to broadcast rolls/updates)
 

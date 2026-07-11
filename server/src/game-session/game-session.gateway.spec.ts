@@ -1,7 +1,13 @@
-import { WS_EVENTS, type SessionSummary } from '@dnd/shared';
+import {
+  WS_EVENTS,
+  type CharacterSheetPayload,
+  type SessionSummary,
+} from '@dnd/shared';
 import type { Server, Socket } from 'socket.io';
 import type { User } from '../generated/prisma/client';
+import type { CharacterSheetService } from '../user/character-sheet.service';
 import type { UserProvisioningService } from '../user/user-provisioning.service';
+import type { DiceService } from './dice.service';
 import { GameSessionGateway } from './game-session.gateway';
 import type { GameSessionService } from './game-session.service';
 
@@ -11,8 +17,26 @@ describe('GameSessionGateway', () => {
   const getSession = jest.fn();
   const getMessagesSince = jest.fn();
   const addChatMessage = jest.fn();
+  const addSystemMessage = jest.fn();
+  const listSessionSheets = jest.fn();
+  const getOwnSheet = jest.fn();
+  const updateSheet = jest.fn();
+  const roll = jest.fn();
   const emit = jest.fn();
   const to = jest.fn().mockReturnValue({ emit });
+
+  const sheet: CharacterSheetPayload = {
+    id: 'sheet-uuid',
+    userId: 'user-uuid',
+    sessionId: '3b241101-e2bb-4255-8caf-4136c566a962',
+    name: 'Thorin',
+    hpCurrent: 12,
+    hpMax: 12,
+    stats: { str: 15, dex: 12, con: 14, int: 10, wis: 11, cha: 8 },
+    inventory: [],
+    aiProvider: null,
+    aiModel: null,
+  };
 
   const user = { id: 'user-uuid', email: 'player@example.com' } as User;
   const summary: SessionSummary = {
@@ -41,6 +65,7 @@ describe('GameSessionGateway', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     to.mockReturnValue({ emit });
+    listSessionSheets.mockResolvedValue([]);
     gateway = new GameSessionGateway(
       { verify },
       { ensureUser } as unknown as UserProvisioningService,
@@ -48,7 +73,14 @@ describe('GameSessionGateway', () => {
         getSession,
         getMessagesSince,
         addChatMessage,
+        addSystemMessage,
       } as unknown as GameSessionService,
+      {
+        listSessionSheets,
+        getOwnSheet,
+        updateSheet,
+      } as unknown as CharacterSheetService,
+      { roll } as unknown as DiceService,
     );
     gateway.server = { to } as unknown as Server;
   });
@@ -127,9 +159,10 @@ describe('GameSessionGateway', () => {
         summary.id,
         '2026-07-10T12:00:00.000Z',
       );
+      expect(listSessionSheets).toHaveBeenCalledWith(summary.id);
       expect(result).toEqual({
         success: true,
-        data: { session: summary, messages: [] },
+        data: { session: summary, messages: [], characters: [] },
       });
     });
 
@@ -179,6 +212,110 @@ describe('GameSessionGateway', () => {
       expect(to).toHaveBeenCalledWith(room);
       expect(emit).toHaveBeenCalledWith(WS_EVENTS.CHAT_MESSAGE, message);
       expect(result).toEqual({ success: true, data: message });
+    });
+  });
+
+  describe('dice:roll', () => {
+    const payload = { sessionId: summary.id, notation: '1d20+3' };
+    const joinedSocket = () =>
+      makeSocket({ rooms: new Set([room]) } as Partial<Socket>);
+
+    it('rejects rolling before joining the session room', async () => {
+      const result = await gateway.onRollDice(makeSocket(), payload);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Join the session before rolling',
+      });
+      expect(roll).not.toHaveBeenCalled();
+    });
+
+    it('rejects rolling without a character sheet', async () => {
+      getOwnSheet.mockResolvedValue(null);
+
+      const result = await gateway.onRollDice(joinedSocket(), payload);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Create a character first',
+      });
+      expect(roll).not.toHaveBeenCalled();
+    });
+
+    it('rolls under the character name and broadcasts the result', async () => {
+      getOwnSheet.mockResolvedValue(sheet);
+      const metadata = {
+        kind: 'dice_roll' as const,
+        notation: '1d20+3',
+        terms: [],
+        total: 17,
+        characterName: 'Thorin',
+      };
+      roll.mockReturnValue({
+        messageText: 'Thorin rolled 1d20+3 → 17',
+        metadata,
+      });
+      const message = {
+        id: 'msg-uuid',
+        sessionId: summary.id,
+        senderType: 'SYSTEM',
+        senderName: 'Thorin',
+        messageText: 'Thorin rolled 1d20+3 → 17',
+        metadata,
+        createdAt: '2026-07-10T12:06:00.000Z',
+      };
+      addSystemMessage.mockResolvedValue(message);
+
+      const result = await gateway.onRollDice(joinedSocket(), payload);
+
+      expect(roll).toHaveBeenCalledWith('1d20+3', 'Thorin');
+      expect(addSystemMessage).toHaveBeenCalledWith(
+        summary.id,
+        'Thorin',
+        'Thorin rolled 1d20+3 → 17',
+        metadata,
+      );
+      expect(emit).toHaveBeenCalledWith(WS_EVENTS.CHAT_MESSAGE, message);
+      expect(result).toEqual({ success: true, data: message });
+    });
+  });
+
+  describe('character:update', () => {
+    const payload = { sessionId: summary.id, hpCurrent: 5 };
+    const joinedSocket = () =>
+      makeSocket({ rooms: new Set([room]) } as Partial<Socket>);
+
+    it('rejects updating before joining the session room', async () => {
+      const result = await gateway.onUpdateCharacter(makeSocket(), payload);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'Join the session before updating',
+      });
+      expect(updateSheet).not.toHaveBeenCalled();
+    });
+
+    it('updates the caller sheet and broadcasts the change', async () => {
+      const updated = { ...sheet, hpCurrent: 5 };
+      updateSheet.mockResolvedValue(updated);
+
+      const result = await gateway.onUpdateCharacter(joinedSocket(), payload);
+
+      expect(updateSheet).toHaveBeenCalledWith('user-uuid', payload);
+      expect(emit).toHaveBeenCalledWith(WS_EVENTS.CHARACTER_UPDATED, updated);
+      expect(result).toEqual({ success: true, data: updated });
+    });
+
+    it('returns the service error message on a failed update', async () => {
+      updateSheet.mockRejectedValue(new Error('hpCurrent cannot exceed hpMax'));
+
+      const result = await gateway.onUpdateCharacter(joinedSocket(), payload);
+
+      expect(result).toEqual({
+        success: false,
+        error: 'hpCurrent cannot exceed hpMax',
+      });
+      expect(emit).not.toHaveBeenCalled();
     });
   });
 });

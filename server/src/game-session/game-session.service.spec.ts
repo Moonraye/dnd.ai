@@ -33,6 +33,7 @@ describe('GameSessionService', () => {
     senderType: 'HUMAN',
     senderName: 'player@example.com',
     messageText: 'Roll for initiative!',
+    metadata: null,
     createdAt: new Date('2026-07-10T12:05:00.000Z'),
   };
 
@@ -95,6 +96,44 @@ describe('GameSessionService', () => {
       },
     });
     expect(result.createdAt).toBe('2026-07-10T12:05:00.000Z');
+    expect(result.metadata).toBeNull();
+  });
+
+  it('persists a dice roll as a SYSTEM message carrying metadata', async () => {
+    const metadata = {
+      kind: 'dice_roll' as const,
+      notation: '1d20+3',
+      terms: [{ count: 1, sides: 20, rolls: [14], subtotal: 14 }],
+      modifierTotal: 3,
+      total: 17,
+      characterName: 'Thorin',
+    };
+    messageCreate.mockResolvedValue({
+      ...dbMessage,
+      senderType: 'SYSTEM',
+      senderName: 'Thorin',
+      messageText: 'Thorin rolled 1d20+3 → 17',
+      metadata,
+    });
+
+    const result = await service.addSystemMessage(
+      'session-uuid',
+      'Thorin',
+      'Thorin rolled 1d20+3 → 17',
+      metadata,
+    );
+
+    expect(messageCreate).toHaveBeenCalledWith({
+      data: {
+        sessionId: 'session-uuid',
+        senderType: 'SYSTEM',
+        senderName: 'Thorin',
+        messageText: 'Thorin rolled 1d20+3 → 17',
+        metadata,
+      },
+    });
+    expect(result.senderType).toBe('SYSTEM');
+    expect(result.metadata).toEqual(metadata);
   });
 
   it('filters messages by the since timestamp when provided', async () => {

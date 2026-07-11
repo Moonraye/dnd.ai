@@ -1,4 +1,8 @@
-import type { ChatMessagePayload, SessionSummary } from '@dnd/shared';
+import type {
+  CharacterSheetPayload,
+  ChatMessagePayload,
+  SessionSummary,
+} from '@dnd/shared';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
@@ -8,6 +12,8 @@ interface SessionState {
   sessionId: string | null;
   session: SessionSummary | null;
   messages: ChatMessagePayload[];
+  /** Party sheets in the room, feeding the HUD and party strip. */
+  characters: CharacterSheetPayload[];
   /** ISO timestamp of the newest received message (ADR 6 catch-up cursor). */
   lastMessageAt: string | null;
   joinStatus: JoinStatus;
@@ -16,6 +22,8 @@ interface SessionState {
   setSessionInfo: (session: SessionSummary) => void;
   setJoinStatus: (status: JoinStatus, error?: string) => void;
   addMessages: (incoming: ChatMessagePayload[]) => void;
+  setCharacters: (characters: CharacterSheetPayload[]) => void;
+  upsertCharacter: (character: CharacterSheetPayload) => void;
   reset: () => void;
 }
 
@@ -23,6 +31,7 @@ const initialState = {
   sessionId: null,
   session: null,
   messages: [],
+  characters: [] as CharacterSheetPayload[],
   lastMessageAt: null,
   joinStatus: 'idle' as JoinStatus,
   joinError: null,
@@ -61,6 +70,21 @@ export const useSessionStore = create<SessionState>()(
             messages,
             lastMessageAt: messages[messages.length - 1].createdAt,
           };
+        }),
+
+      setCharacters: (characters) => set({ characters }),
+
+      upsertCharacter: (character) =>
+        set((state) => {
+          const index = state.characters.findIndex(
+            (existing) => existing.id === character.id,
+          );
+          if (index === -1) {
+            return { characters: [...state.characters, character] };
+          }
+          const characters = [...state.characters];
+          characters[index] = character;
+          return { characters };
         }),
 
       reset: () => set(initialState),

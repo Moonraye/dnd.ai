@@ -6,15 +6,26 @@ import { useSendChat } from '../model/useSendChat';
 interface ChatInputProps {
   sessionId: string;
   disabled?: boolean;
+  /** When set, a `/roll <expr>` message is routed here instead of chat. */
+  onRollCommand?: (notation: string) => Promise<boolean>;
 }
 
-export function ChatInput({ sessionId, disabled = false }: ChatInputProps) {
+const ROLL_COMMAND = /^\/roll\s+(.+)$/i;
+
+export function ChatInput({
+  sessionId,
+  disabled = false,
+  onRollCommand,
+}: ChatInputProps) {
   const [text, setText] = useState('');
   const { send, isSending, error } = useSendChat(sessionId);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const ok = await send(text);
+    const rollMatch = onRollCommand ? ROLL_COMMAND.exec(text.trim()) : null;
+    const ok = rollMatch
+      ? await onRollCommand!(rollMatch[1])
+      : await send(text);
     if (ok) setText('');
   };
 

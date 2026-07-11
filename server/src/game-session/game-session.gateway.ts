@@ -9,10 +9,13 @@ import {
   WebSocketServer,
 } from '@nestjs/websockets';
 import {
+  DiceRollSchema,
   JoinSessionSchema,
   SendChatMessageSchema,
+  UpdateCharacterSheetSchema,
   WS_EVENTS,
   type AckResponse,
+  type CharacterSheetPayload,
   type ChatMessagePayload,
   type JoinSessionResult,
 } from '@dnd/shared';
@@ -23,10 +26,13 @@ import {
   type TokenVerifier,
 } from '../auth/token-verifier.interface';
 import type { User } from '../generated/prisma/client';
+import { CharacterSheetService } from '../user/character-sheet.service';
 import { UserProvisioningService } from '../user/user-provisioning.service';
+import { DiceService } from './dice.service';
 import { GameSessionService } from './game-session.service';
 
-const sessionRoom = (sessionId: string): string => `session:${sessionId}`;
+export const sessionRoom = (sessionId: string): string =>
+  `session:${sessionId}`;
 
 // socket.io types `socket.data` as `any`; funnel access through one cast.
 interface SocketData {
@@ -37,7 +43,7 @@ const getSocketUser = (socket: Socket): User | undefined =>
   (socket.data as SocketData).user;
 
 @WebSocketGateway({
-  cors: { origin: process.env.CLIENT_URL ?? 'http://localhost:3000' },
+  cors: { origin: process.env.CLIENT_URL ?? true },
   // ADR 6: brief drops keep rooms + socket.data and replay missed packets.
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000,
@@ -55,6 +61,8 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     @Inject(TOKEN_VERIFIER) private readonly tokenVerifier: TokenVerifier,
     private readonly userProvisioning: UserProvisioningService,
     private readonly gameSessionService: GameSessionService,
+    private readonly characterSheetService: CharacterSheetService,
+    private readonly diceService: DiceService,
   ) {}
 
   // ADR 2: authenticate in the handshake, before any events flow. A socket.io
@@ -95,7 +103,10 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         session.id,
         parsed.data.since,
       );
-      return { success: true, data: { session, messages } };
+      const characters = await this.characterSheetService.listSessionSheets(
+        session.id,
+      );
+      return { success: true, data: { session, messages, characters } };
     } catch {
       return { success: false, error: 'Session not found' };
     }
@@ -129,6 +140,86 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     // the client renders every message through one path.
     this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
     return { success: true, data: message };
+  }
+
+  @SubscribeMessage(WS_EVENTS.ROLL_DICE)
+  async onRollDice(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<AckResponse<ChatMessagePayload>> {
+    const parsed = DiceRollSchema.safeParse(body);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const room = sessionRoom(parsed.data.sessionId);
+    if (!socket.rooms.has(room)) {
+      return { success: false, error: 'Join the session before rolling' };
+    }
+
+    const user = getSocketUser(socket);
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+    // Rolls are attributed to the character (guaranteed by the creation gate).
+    const sheet = await this.characterSheetService.getOwnSheet(
+      user.id,
+      parsed.data.sessionId,
+    );
+    if (!sheet) {
+      return { success: false, error: 'Create a character first' };
+    }
+
+    const { messageText, metadata } = this.diceService.roll(
+      parsed.data.notation,
+      sheet.name,
+    );
+    const message = await this.gameSessionService.addSystemMessage(
+      parsed.data.sessionId,
+      sheet.name,
+      messageText,
+      metadata,
+    );
+    // The dice result rides the normal chat broadcast so every client renders
+    // it through one path (and catch-up replays it unchanged).
+    this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+    return { success: true, data: message };
+  }
+
+  @SubscribeMessage(WS_EVENTS.UPDATE_CHARACTER)
+  async onUpdateCharacter(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() body: unknown,
+  ): Promise<AckResponse<CharacterSheetPayload>> {
+    const parsed = UpdateCharacterSheetSchema.safeParse(body);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const room = sessionRoom(parsed.data.sessionId);
+    if (!socket.rooms.has(room)) {
+      return { success: false, error: 'Join the session before updating' };
+    }
+
+    const user = getSocketUser(socket);
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
+    try {
+      // updateSheet is owner-scoped by construction (userId in the query).
+      const sheet = await this.characterSheetService.updateSheet(
+        user.id,
+        parsed.data,
+      );
+      this.server.to(room).emit(WS_EVENTS.CHARACTER_UPDATED, sheet);
+      return { success: true, data: sheet };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Update failed',
+      };
+    }
   }
 
   private async authenticateSocket(socket: Socket): Promise<void> {

@@ -1,6 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ChatMessagePayload, SessionSummary } from '@dnd/shared';
-import type { CampaignSession, ChatMessage } from '../generated/prisma/client';
+import type {
+  ChatMessagePayload,
+  DiceRollMetadata,
+  SessionSummary,
+} from '@dnd/shared';
+import type {
+  CampaignSession,
+  ChatMessage,
+  Prisma,
+} from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateLobbyDto } from './dto/create-lobby.dto';
 
@@ -50,6 +58,28 @@ export class GameSessionService {
   }
 
   /**
+   * Persist a server-generated SYSTEM message (e.g. a dice roll). The dice
+   * card rides the same chat feed, so ADR 6 catch-up/recovery is unchanged.
+   */
+  async addSystemMessage(
+    sessionId: string,
+    senderName: string,
+    messageText: string,
+    metadata: DiceRollMetadata,
+  ): Promise<ChatMessagePayload> {
+    const message = await this.prisma.chatMessage.create({
+      data: {
+        sessionId,
+        senderType: 'SYSTEM',
+        senderName,
+        messageText,
+        metadata: metadata as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return this.toChatPayload(message);
+  }
+
+  /**
    * ADR 6: on (re)join, return only messages the client is missing.
    * Uses the `[sessionId, createdAt]` index.
    */
@@ -85,6 +115,7 @@ export class GameSessionService {
       senderType: message.senderType,
       senderName: message.senderName,
       messageText: message.messageText,
+      metadata: (message.metadata as DiceRollMetadata | null) ?? null,
       createdAt: message.createdAt.toISOString(),
     };
   }

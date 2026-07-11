@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import type { SenderType, SessionStatus } from './types';
+import type { DiceRollMetadata } from './dice';
+import type {
+  AbilityScores,
+  InventoryItem,
+  SenderType,
+  SessionStatus,
+} from './types';
 
 /** Socket.io event names shared by client and server (ADR 1). */
 export const WS_EVENTS = {
@@ -9,6 +15,12 @@ export const WS_EVENTS = {
   SEND_CHAT: 'chat:send',
   /** server → client broadcast: a new chat message in the room. */
   CHAT_MESSAGE: 'chat:message',
+  /** client → server, with ack: roll dice; the result rides CHAT_MESSAGE. */
+  ROLL_DICE: 'dice:roll',
+  /** client → server, with ack: patch the caller's own character sheet. */
+  UPDATE_CHARACTER: 'character:update',
+  /** server → client broadcast: a character sheet in the room changed. */
+  CHARACTER_UPDATED: 'character:updated',
 } as const;
 
 export const JoinSessionSchema = z.object({
@@ -46,9 +58,30 @@ export interface ChatMessagePayload {
   senderName: string;
   messageText: string;
   createdAt: string;
+  /**
+   * Present on SYSTEM dice-roll messages so the client renders a rich card.
+   * Optional/nullable: legacy rows and plain chat carry no metadata.
+   */
+  metadata?: DiceRollMetadata | null;
+}
+
+/** Wire representation of a persisted character sheet. */
+export interface CharacterSheetPayload {
+  id: string;
+  userId: string;
+  sessionId: string;
+  name: string;
+  hpCurrent: number;
+  hpMax: number;
+  stats: AbilityScores;
+  inventory: InventoryItem[];
+  aiProvider: string | null;
+  aiModel: string | null;
 }
 
 export interface JoinSessionResult {
   session: SessionSummary;
   messages: ChatMessagePayload[];
+  /** Party sheets in the room, so the HUD strip hydrates on join. */
+  characters: CharacterSheetPayload[];
 }

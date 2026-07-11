@@ -30,6 +30,7 @@ enum SenderType {
   HUMAN
   AI_DM
   AI_PLAYER
+  SYSTEM
 }
 
 model CampaignSession {
@@ -72,6 +73,8 @@ model ChatMessage {
   senderType  SenderType
   senderName  String
   messageText String
+  // Structured dice-roll payload on SYSTEM messages; null for plain chat.
+  metadata    Json?
   createdAt   DateTime        @default(now())
 
   @@index([sessionId, createdAt])

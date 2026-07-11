@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 // Mirror of the Prisma enums in server/prisma/schema.prisma.
 export const SessionStatusSchema = z.enum(['LOBBY', 'ACTIVE', 'COMPLETED']);
-export const SenderTypeSchema = z.enum(['HUMAN', 'AI_DM', 'AI_PLAYER']);
+export const SenderTypeSchema = z.enum(['HUMAN', 'AI_DM', 'AI_PLAYER', 'SYSTEM']);
 
 export const CreateLobbySchema = z.object({
   title: z.string().min(3).max(80),
@@ -45,4 +45,29 @@ export const CharacterSheetSchema = z
 export const SendChatMessageSchema = z.object({
   sessionId: z.uuid(),
   messageText: z.string().min(1).max(2000),
+});
+
+/**
+ * In-session character mutations (HP, inventory). A partial patch — the
+ * `hpCurrent <= hpMax` invariant is enforced server-side against the
+ * merged sheet, since a patch alone can't see both fields.
+ */
+export const UpdateCharacterSheetSchema = z
+  .object({
+    sessionId: z.uuid(),
+    hpCurrent: z.number().int().min(0).optional(),
+    hpMax: z.number().int().min(1).optional(),
+    inventory: z.array(InventoryItemSchema).optional(),
+  })
+  .refine(
+    (patch) =>
+      patch.hpCurrent !== undefined ||
+      patch.hpMax !== undefined ||
+      patch.inventory !== undefined,
+    { message: 'Provide at least one field to update' },
+  );
+
+/** Free-text concept the AI turns into a draft character sheet (ADR 4). */
+export const GenerateCharacterDraftSchema = z.object({
+  prompt: z.string().min(1).max(500),
 });
