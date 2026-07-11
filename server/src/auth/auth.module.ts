@@ -16,11 +16,11 @@ import { JwksTokenVerifier } from './verifiers/jwks-token.verifier';
       provide: TOKEN_VERIFIER,
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => {
+        const supabaseUrl = configService.getOrThrow<string>('SUPABASE_URL');
         const jwtSecret = configService.get<string>('SUPABASE_JWT_SECRET');
         if (jwtSecret && !jwtSecret.startsWith('REPLACE_WITH')) {
-          return new Hs256TokenVerifier(jwtSecret);
+          return new Hs256TokenVerifier(jwtSecret, supabaseUrl);
         }
-        const supabaseUrl = configService.getOrThrow<string>('SUPABASE_URL');
         return new JwksTokenVerifier(supabaseUrl);
       },
     },

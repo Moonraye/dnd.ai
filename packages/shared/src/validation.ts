@@ -18,20 +18,20 @@ export const AbilityScoresSchema = z.object({
 });
 
 export const InventoryItemSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().min(1).max(60),
   qty: z.number().int().min(1),
 });
 
 export const CharacterSheetSchema = z
   .object({
     name: z.string().min(1).max(50),
-    hpCurrent: z.number().int().min(0),
-    hpMax: z.number().int().min(1),
+    hpCurrent: z.number().int().min(0).max(9999),
+    hpMax: z.number().int().min(1).max(9999),
     stats: AbilityScoresSchema,
-    inventory: z.array(InventoryItemSchema).default([]),
+    inventory: z.array(InventoryItemSchema).max(50).default([]),
     // ADR 4: AI-controlled sheets carry a provider/model pair; both null = human.
-    aiProvider: z.string().min(1).nullable().default(null),
-    aiModel: z.string().min(1).nullable().default(null),
+    aiProvider: z.string().min(1).max(100).nullable().default(null),
+    aiModel: z.string().min(1).max(100).nullable().default(null),
   })
   .refine((s) => s.hpCurrent <= s.hpMax, {
     message: 'hpCurrent cannot exceed hpMax',
@@ -55,9 +55,9 @@ export const SendChatMessageSchema = z.object({
 export const UpdateCharacterSheetSchema = z
   .object({
     sessionId: z.uuid(),
-    hpCurrent: z.number().int().min(0).optional(),
-    hpMax: z.number().int().min(1).optional(),
-    inventory: z.array(InventoryItemSchema).optional(),
+    hpCurrent: z.number().int().min(0).max(9999).optional(),
+    hpMax: z.number().int().min(1).max(9999).optional(),
+    inventory: z.array(InventoryItemSchema).max(50).optional(),
   })
   .refine(
     (patch) =>
@@ -70,4 +70,34 @@ export const UpdateCharacterSheetSchema = z
 /** Free-text concept the AI turns into a draft character sheet (ADR 4). */
 export const GenerateCharacterDraftSchema = z.object({
   prompt: z.string().min(1).max(500),
+});
+
+export const AiStateUpdateSchema = z.object({
+  activeQuests: z.array(z.string().max(200)).max(20).optional(),
+  npcRelationships: z.record(z.string(), z.string().max(100)).optional(),
+  campaignSummary: z.string().max(2000).optional(),
+  hpChanges: z
+    .array(
+      z.object({
+        characterName: z.string().max(50),
+        delta: z.number().int().min(-9999).max(9999),
+      }),
+    )
+    .max(10)
+    .optional(),
+  inventoryChanges: z
+    .array(
+      z.object({
+        characterName: z.string().max(50),
+        item: z.string().max(60),
+        qty: z.number().int().min(-9999).max(9999),
+      }),
+    )
+    .max(20)
+    .optional(),
+});
+
+export const AiResponseSchema = z.object({
+  messageText: z.string().min(1).max(3000),
+  stateUpdate: AiStateUpdateSchema.optional(),
 });

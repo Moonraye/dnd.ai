@@ -1,17 +1,16 @@
 'use client';
 
 import type { InventoryItem } from '@dnd/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import {
   useMyCharacter,
   useUpdateCharacter,
-} from '@/features/character-sheet';
-import {
   ABILITY_KEYS,
   ABILITY_LABELS,
-} from '@/features/character-sheet/model/standardArray';
+} from '@/features/character-sheet';
 import { HpBar } from './HpBar';
 import { PartyStrip } from './PartyStrip';
+import { apiFetch } from '@/shared/api/httpClient';
 
 interface CharacterHudProps {
   sessionId: string;
@@ -20,13 +19,72 @@ interface CharacterHudProps {
 export function CharacterHud({ sessionId }: CharacterHudProps) {
   const { myCharacter } = useMyCharacter();
   const { update, isSaving, error } = useUpdateCharacter(sessionId);
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [inventory, setInventory] = useState<Array<InventoryItem & { client_id: string }>>([]);
+  const [isAddingAi, setIsAddingAi] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  const addAiDm = async () => {
+    setIsAddingAi(true);
+    setAiError(null);
+    try {
+      await apiFetch(`/sessions/${sessionId}/characters`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: 'Dungeon Master',
+          hpMax: 100,
+          hpCurrent: 100,
+          stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+          inventory: [],
+          aiProvider: 'google',
+          aiModel: 'gemini-flash-latest',
+        }),
+      });
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Failed to add AI DM');
+    } finally {
+      setIsAddingAi(false);
+    }
+  };
+
+  const addAiPlayer = async () => {
+    setIsAddingAi(true);
+    setAiError(null);
+    const names = ['Gimli', 'Legolas', 'Gandalf', 'Aragorn', 'Boromir'];
+    const selectedName = names[Math.floor(Math.random() * names.length)] + ' (AI)';
+    try {
+      await apiFetch(`/sessions/${sessionId}/characters`, {
+        method: 'POST',
+        body: JSON.stringify({
+          name: selectedName,
+          hpMax: 30,
+          hpCurrent: 30,
+          stats: { str: 12, dex: 12, con: 12, int: 12, wis: 12, cha: 12 },
+          inventory: [],
+          aiProvider: 'google',
+          aiModel: 'gemini-flash-latest',
+        }),
+      });
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : 'Failed to add AI Companion');
+    } finally {
+      setIsAddingAi(false);
+    }
+  };
 
   // Re-sync the editable inventory buffer whenever the stored sheet changes
   // (owner-only edits, so no risk of clobbering someone else's change).
-  const inventoryKey = JSON.stringify(myCharacter?.inventory ?? []);
+  const inventoryKey = useMemo(() => {
+    return JSON.stringify(myCharacter?.inventory ?? []);
+  }, [myCharacter?.inventory]);
+
   useEffect(() => {
-    setInventory(myCharacter?.inventory ?? []);
+    setInventory(
+      (myCharacter?.inventory ?? []).map((item) => ({
+        name: item.name,
+        qty: item.qty,
+        client_id: crypto.randomUUID(),
+      }))
+    );
   }, [inventoryKey, myCharacter?.inventory]);
 
   if (!myCharacter) return null;
@@ -92,7 +150,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           <button
             type="button"
             onClick={() =>
-              setInventory((prev) => [...prev, { name: '', qty: 1 }])
+              setInventory((prev) => [...prev, { client_id: crypto.randomUUID(), name: '', qty: 1 }])
             }
             className="rounded-md border border-zinc-400 px-2 py-0.5 text-xs font-medium dark:border-zinc-600"
           >
@@ -100,7 +158,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           </button>
         </div>
         {inventory.map((item, index) => (
-          <div key={index} className="flex items-center gap-2">
+          <div key={item.client_id} className="flex items-center gap-2">
             <input
               aria-label={`Item ${index + 1} name`}
               type="text"
@@ -157,6 +215,33 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           {error}
         </p>
       ) : null}
+
+      <div className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
+        <span className="text-sm font-medium">AI Companions</span>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={addAiDm}
+            disabled={isAddingAi}
+            className="flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs font-semibold hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200"
+          >
+            Spawn AI DM
+          </button>
+          <button
+            type="button"
+            onClick={addAiPlayer}
+            disabled={isAddingAi}
+            className="flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs font-semibold hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200"
+          >
+            Spawn AI Player
+          </button>
+        </div>
+        {aiError ? (
+          <p role="alert" className="text-xs text-red-600">
+            {aiError}
+          </p>
+        ) : null}
+      </div>
 
       <div className="flex flex-col gap-2 border-t border-zinc-200 pt-3 dark:border-zinc-800">
         <span className="text-sm font-medium">Party</span>

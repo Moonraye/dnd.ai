@@ -7,8 +7,10 @@ import { GameSessionController } from './game-session.controller';
 import { GameSessionGateway } from './game-session.gateway';
 import { GameSessionService } from './game-session.service';
 
+import { AiModule } from '../ai/ai.module';
+
 @Module({
-  imports: [AuthModule, UserModule],
+  imports: [AuthModule, UserModule, AiModule],
   controllers: [GameSessionController, CharacterSheetController],
   providers: [GameSessionService, GameSessionGateway, DiceService],
 })

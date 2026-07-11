@@ -11,7 +11,7 @@ import type {
   InventoryItem,
   UpdateCharacterSheetInput,
 } from '@dnd/shared';
-import type { CharacterSheet } from '../generated/prisma/client';
+import { Prisma, type CharacterSheet } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -29,37 +29,60 @@ export class CharacterSheetService {
     if (!session) {
       throw new NotFoundException(`Session ${sessionId} not found`);
     }
-    // Phase 4 persists human sheets only; AI-controlled sheets arrive through
-    // a separate path in Phase 5.
-    if (input.aiProvider !== null || input.aiModel !== null) {
-      throw new BadRequestException(
-        'AI character sheets are not supported yet',
-      );
-    }
-    // Decision 1: at most one human-controlled sheet per user per session.
-    const existing = await this.prisma.characterSheet.count({
-      where: { sessionId, userId, aiProvider: null },
-    });
-    if (existing > 0) {
-      throw new ConflictException(
-        'You already have a character in this session',
-      );
+    const isAi = input.aiProvider !== null || input.aiModel !== null;
+
+    if (!isAi) {
+      // Decision 1: at most one human-controlled sheet per user per session.
+      const existing = await this.prisma.characterSheet.count({
+        where: { sessionId, userId, aiProvider: null },
+      });
+      if (existing > 0) {
+        throw new ConflictException(
+          'You already have a character in this session',
+        );
+      }
     }
 
-    const created = await this.prisma.characterSheet.create({
-      data: {
-        userId,
-        sessionId,
-        name: input.name,
-        hpCurrent: input.hpCurrent,
-        hpMax: input.hpMax,
-        stats: input.stats,
-        inventory: input.inventory,
-        aiProvider: null,
-        aiModel: null,
-      },
-    });
-    return this.toPayload(created);
+    try {
+      const created = await this.prisma.$transaction(async (tx) => {
+        if (!isAi) {
+          await tx.sessionMember.upsert({
+            where: {
+              userId_sessionId: { userId, sessionId },
+            },
+            create: { userId, sessionId },
+            update: {},
+          });
+        }
+
+        return tx.characterSheet.create({
+          data: {
+            userId: isAi ? null : userId,
+            sessionId,
+            name: input.name,
+            hpCurrent: input.hpCurrent,
+            hpMax: input.hpMax,
+            stats: input.stats,
+            inventory: input.inventory,
+            aiProvider: input.aiProvider,
+            aiModel: input.aiModel,
+          },
+        });
+      });
+      return this.toPayload(created);
+    } catch (error) {
+      if (
+        error &&
+        typeof error === 'object' &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          'You already have a character in this session',
+        );
+      }
+      throw error;
+    }
   }
 
   async updateSheet(
@@ -110,6 +133,27 @@ export class CharacterSheetService {
       orderBy: { name: 'asc' },
     });
     return sheets.map((sheet) => this.toPayload(sheet));
+  }
+
+  async updateSheetById(
+    id: string,
+    data: {
+      hpCurrent?: number;
+      hpMax?: number;
+      inventory?: InventoryItem[];
+    },
+  ): Promise<CharacterSheetPayload> {
+    const updated = await this.prisma.characterSheet.update({
+      where: { id },
+      data: {
+        ...(data.hpCurrent !== undefined && { hpCurrent: data.hpCurrent }),
+        ...(data.hpMax !== undefined && { hpMax: data.hpMax }),
+        ...(data.inventory !== undefined && {
+          inventory: data.inventory as unknown as Prisma.InputJsonValue,
+        }),
+      },
+    });
+    return this.toPayload(updated);
   }
 
   private toPayload(sheet: CharacterSheet): CharacterSheetPayload {

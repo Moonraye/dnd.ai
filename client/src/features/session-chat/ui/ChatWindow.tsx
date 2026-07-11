@@ -1,14 +1,14 @@
 'use client';
 
 import type { ChatMessagePayload } from '@dnd/shared';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, memo } from 'react';
 import { DiceRollCard } from '@/entities/dice';
 
 interface ChatWindowProps {
   messages: ChatMessagePayload[];
 }
 
-function MessageRow({ message }: { message: ChatMessagePayload }) {
+const MessageRow = memo(function MessageRow({ message }: { message: ChatMessagePayload }) {
   if (
     message.senderType === 'SYSTEM' &&
     message.metadata?.kind === 'dice_roll'
@@ -39,13 +39,25 @@ function MessageRow({ message }: { message: ChatMessagePayload }) {
       <p className="whitespace-pre-wrap text-sm">{message.messageText}</p>
     </div>
   );
-}
+});
 
-export function ChatWindow({ messages }: ChatWindowProps) {
+export const ChatWindow = memo(function ChatWindow({ messages }: ChatWindowProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const prevCountRef = useRef(messages.length);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const prevCount = prevCountRef.current;
+    const currentCount = messages.length;
+    prevCountRef.current = currentCount;
+
+    if (currentCount === 0) return;
+
+    // Use smooth scroll only when appending a single new message (active chat).
+    // Use instant 'auto' scroll for initial history load or large catch-up batches.
+    const isSingleAppend = currentCount - prevCount === 1;
+    bottomRef.current?.scrollIntoView({
+      behavior: isSingleAppend ? 'smooth' : 'auto',
+    });
   }, [messages]);
 
   return (
@@ -62,4 +74,4 @@ export function ChatWindow({ messages }: ChatWindowProps) {
       <div ref={bottomRef} />
     </div>
   );
-}
+});

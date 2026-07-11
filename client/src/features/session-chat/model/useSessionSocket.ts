@@ -7,7 +7,7 @@ import {
   type ChatMessagePayload,
   type JoinSessionResult,
 } from '@dnd/shared';
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { getSocket } from '@/shared/api/socketClient';
 import { useSessionStore } from '@/shared/store/sessionStore';
 
@@ -21,11 +21,14 @@ const JOIN_ACK_TIMEOUT_MS = 5000;
  * re-join and catch up on missed messages (ADR 6) through one code path.
  */
 export function useSessionSocket(sessionId: string) {
+  const [retryCount, setRetryCount] = useState(0);
   const session = useSessionStore((state) => state.session);
   const messages = useSessionStore((state) => state.messages);
   const characters = useSessionStore((state) => state.characters);
   const joinStatus = useSessionStore((state) => state.joinStatus);
   const joinError = useSessionStore((state) => state.joinError);
+
+  const retry = () => setRetryCount((c) => c + 1);
 
   useEffect(() => {
     const store = useSessionStore;
@@ -34,8 +37,11 @@ export function useSessionSocket(sessionId: string) {
     store.getState().setActiveSession(sessionId);
 
     const socket = getSocket();
+    let isJoining = false;
 
     const join = async () => {
+      if (isJoining) return;
+      isJoining = true;
       store.getState().setJoinStatus('connecting');
       try {
         const response = (await socket
@@ -55,6 +61,8 @@ export function useSessionSocket(sessionId: string) {
         store.getState().setJoinStatus('joined');
       } catch {
         store.getState().setJoinStatus('error', 'Connection timed out');
+      } finally {
+        isJoining = false;
       }
     };
 
@@ -87,7 +95,7 @@ export function useSessionSocket(sessionId: string) {
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
     };
-  }, [sessionId]);
+  }, [sessionId, retryCount]);
 
-  return { session, messages, characters, joinStatus, joinError };
+  return { session, messages, characters, joinStatus, joinError, retry };
 }

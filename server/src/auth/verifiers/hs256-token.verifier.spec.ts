@@ -4,7 +4,8 @@ import { Hs256TokenVerifier } from './hs256-token.verifier';
 
 describe('Hs256TokenVerifier', () => {
   const secret = 'super-secret-supabase-jwt-secret-for-tests';
-  const verifier = new Hs256TokenVerifier(secret);
+  const supabaseUrl = 'https://supabase.local';
+  const verifier = new Hs256TokenVerifier(secret, supabaseUrl);
 
   const signToken = (
     payload: Record<string, unknown>,
@@ -13,6 +14,8 @@ describe('Hs256TokenVerifier', () => {
   ) =>
     new SignJWT(payload)
       .setProtectedHeader({ alg: 'HS256' })
+      .setIssuer('https://supabase.local/auth/v1')
+      .setAudience('authenticated')
       .setIssuedAt()
       .setExpirationTime(expiresIn)
       .sign(new TextEncoder().encode(signingSecret));

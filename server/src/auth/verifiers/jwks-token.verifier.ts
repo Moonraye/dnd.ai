@@ -12,15 +12,20 @@ import type {
 @Injectable()
 export class JwksTokenVerifier implements TokenVerifier {
   private readonly jwks: ReturnType<typeof createRemoteJWKSet>;
+  private readonly issuer: string;
 
   constructor(supabaseUrl: string) {
     this.jwks = createRemoteJWKSet(
       new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`),
     );
+    this.issuer = `${supabaseUrl}/auth/v1`;
   }
 
   async verify(token: string): Promise<AuthenticatedUser> {
-    const { payload } = await jwtVerify(token, this.jwks);
+    const { payload } = await jwtVerify(token, this.jwks, {
+      issuer: this.issuer,
+      audience: 'authenticated',
+    });
     return toAuthenticatedUser(payload);
   }
 }

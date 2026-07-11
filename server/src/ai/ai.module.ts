@@ -3,6 +3,7 @@ import { AuthModule } from '../auth/auth.module';
 import { UserModule } from '../user/user.module';
 import { AiController } from './ai.controller';
 import { AiService } from './ai.service';
+import { AiOrchestrationService } from './ai-orchestration.service';
 import { genAiProvider } from './genai.provider';
 
 // UserModule is imported alongside AuthModule because SupabaseAuthGuard
@@ -11,6 +12,7 @@ import { genAiProvider } from './genai.provider';
 @Module({
   imports: [AuthModule, UserModule],
   controllers: [AiController],
-  providers: [AiService, genAiProvider],
+  providers: [AiService, AiOrchestrationService, genAiProvider],
+  exports: [AiOrchestrationService],
 })
 export class AiModule {}

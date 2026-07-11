@@ -18,7 +18,11 @@ describe('CharacterSheetService', () => {
   const sheetFindFirst = jest.fn();
   const sheetFindMany = jest.fn();
   const sheetUpdate = jest.fn();
+  const sessionMemberUpsert = jest.fn();
+  const transaction = jest.fn((callback) => callback(prisma));
   const prisma = {
+    $transaction: transaction,
+    sessionMember: { upsert: sessionMemberUpsert },
     campaignSession: { findUnique: sessionFindUnique },
     characterSheet: {
       count: sheetCount,
@@ -55,7 +59,10 @@ describe('CharacterSheetService', () => {
     aiModel: null,
   };
 
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    transaction.mockImplementation((callback) => callback(prisma));
+  });
 
   it('creates a human sheet and returns a serialized payload', async () => {
     sessionFindUnique.mockResolvedValue(dbSession);
@@ -87,16 +94,32 @@ describe('CharacterSheetService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('rejects AI-controlled sheets in Phase 4', async () => {
+  it('creates an AI-controlled sheet and sets userId to null', async () => {
     sessionFindUnique.mockResolvedValue(dbSession);
+    const dbAiSheet = { ...dbSheet, userId: null, aiProvider: 'google', aiModel: 'gemini-flash-latest' };
+    sheetCreate.mockResolvedValue(dbAiSheet);
 
-    await expect(
-      service.createSheet('user-uuid', 'session-uuid', {
-        ...validInput,
+    const result = await service.createSheet('user-uuid', 'session-uuid', {
+      ...validInput,
+      aiProvider: 'google',
+      aiModel: 'gemini-flash-latest',
+    });
+
+    expect(sheetCreate).toHaveBeenCalledWith({
+      data: {
+        userId: null,
+        sessionId: 'session-uuid',
+        name: 'Thorin',
+        hpCurrent: 12,
+        hpMax: 12,
+        stats: validInput.stats,
+        inventory: validInput.inventory,
         aiProvider: 'google',
-        aiModel: 'gemini-2.5-flash',
-      }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+        aiModel: 'gemini-flash-latest',
+      },
+    });
+    expect(sessionMemberUpsert).not.toHaveBeenCalled();
+    expect(result.userId).toBeNull();
   });
 
   it('rejects a second human sheet in the same session', async () => {

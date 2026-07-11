@@ -15,16 +15,6 @@ import { GENAI_CLIENT } from './genai.provider';
 // "no longer available to new users" over time, which 404s the call.
 const MODEL = 'gemini-flash-latest';
 
-const SCHEMA_INSTRUCTIONS = `You generate D&D 5e characters. Respond with ONLY a JSON object of this exact shape:
-{
-  "name": string (1-50 chars),
-  "hpCurrent": integer >= 0 and <= hpMax,
-  "hpMax": integer >= 1,
-  "stats": { "str": int, "dex": int, "con": int, "int": int, "wis": int, "cha": int } each 1-30,
-  "inventory": [ { "name": string, "qty": integer >= 1 } ]
-}
-Do not include any other fields, commentary, or markdown. Concept: `;
-
 const DRAFT_FAILED = 'AI draft failed — try again or fill the form manually';
 
 @Injectable()
@@ -42,8 +32,20 @@ export class AiService {
     try {
       const response = await this.genai.models.generateContent({
         model: MODEL,
-        contents: `${SCHEMA_INSTRUCTIONS}${prompt}`,
-        config: { responseMimeType: 'application/json' },
+        contents: prompt,
+        config: {
+          systemInstruction: `You generate D&D 5e characters. Respond with ONLY a JSON object of this exact shape:
+{
+  "name": string (1-50 chars),
+  "hpCurrent": integer >= 0 and <= hpMax,
+  "hpMax": integer >= 1,
+  "stats": { "str": int, "dex": int, "con": int, "int": int, "wis": int, "cha": int } each 1-30,
+  "inventory": [ { "name": string, "qty": integer >= 1 } ]
+}
+Do not include any other fields, commentary, or markdown.`,
+          responseMimeType: 'application/json',
+          maxOutputTokens: 1000,
+        },
       });
       raw = response.text;
     } catch (error) {
@@ -60,7 +62,7 @@ export class AiService {
       parsed = JSON.parse(raw);
     } catch (error) {
       this.logger.error(
-        `Gemini response was not valid JSON: ${raw}`,
+        `Gemini response was not valid JSON (truncated): ${raw.substring(0, 200)}`,
         error as Error,
       );
       throw new BadGatewayException(DRAFT_FAILED);
@@ -76,7 +78,9 @@ export class AiService {
     const result = CharacterSheetSchema.safeParse(candidate);
     if (!result.success) {
       this.logger.error(
-        `Gemini draft failed schema validation: ${JSON.stringify(result.error.issues)} — raw: ${raw}`,
+        `Gemini draft failed schema validation: ${JSON.stringify(
+          result.error.issues,
+        )} — raw (truncated): ${raw.substring(0, 200)}`,
       );
       throw new BadGatewayException(DRAFT_FAILED);
     }

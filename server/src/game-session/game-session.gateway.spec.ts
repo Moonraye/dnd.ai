@@ -24,6 +24,7 @@ describe('GameSessionGateway', () => {
   const roll = jest.fn();
   const emit = jest.fn();
   const to = jest.fn().mockReturnValue({ emit });
+  const isMember = jest.fn();
 
   const sheet: CharacterSheetPayload = {
     id: 'sheet-uuid',
@@ -66,6 +67,7 @@ describe('GameSessionGateway', () => {
     jest.clearAllMocks();
     to.mockReturnValue({ emit });
     listSessionSheets.mockResolvedValue([]);
+    isMember.mockResolvedValue(true);
     gateway = new GameSessionGateway(
       { verify },
       { ensureUser } as unknown as UserProvisioningService,
@@ -74,6 +76,7 @@ describe('GameSessionGateway', () => {
         getMessagesSince,
         addChatMessage,
         addSystemMessage,
+        isMember,
       } as unknown as GameSessionService,
       {
         listSessionSheets,
@@ -81,6 +84,7 @@ describe('GameSessionGateway', () => {
         updateSheet,
       } as unknown as CharacterSheetService,
       { roll } as unknown as DiceService,
+      { evaluateTurns: jest.fn() } as unknown as AiOrchestrationService,
     );
     gateway.server = { to } as unknown as Server;
   });
@@ -174,6 +178,20 @@ describe('GameSessionGateway', () => {
       });
 
       expect(result).toEqual({ success: false, error: 'Session not found' });
+    });
+
+    it('returns an error ack when the user is not a member of the session', async () => {
+      isMember.mockResolvedValue(false);
+
+      const result = await gateway.onJoinSession(makeSocket(), {
+        sessionId: summary.id,
+      });
+
+      expect(result).toEqual({
+        success: false,
+        error: 'You are not a member of this session',
+      });
+      expect(getSession).not.toHaveBeenCalled();
     });
   });
 

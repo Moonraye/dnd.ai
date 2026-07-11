@@ -9,6 +9,8 @@ import type {
   SendChatMessageSchema,
   UpdateCharacterSheetSchema,
   GenerateCharacterDraftSchema,
+  AiStateUpdateSchema,
+  AiResponseSchema,
 } from './validation';
 
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
@@ -24,3 +26,5 @@ export type UpdateCharacterSheetInput = z.infer<
 export type GenerateCharacterDraftInput = z.infer<
   typeof GenerateCharacterDraftSchema
 >;
+export type AiStateUpdate = z.infer<typeof AiStateUpdateSchema>;
+export type AiResponse = z.infer<typeof AiResponseSchema>;

@@ -18,6 +18,7 @@ interface SessionState {
   lastMessageAt: string | null;
   joinStatus: JoinStatus;
   joinError: string | null;
+  knownMessageIds: Set<string>;
   setActiveSession: (sessionId: string) => void;
   setSessionInfo: (session: SessionSummary) => void;
   setJoinStatus: (status: JoinStatus, error?: string) => void;
@@ -35,6 +36,7 @@ const initialState = {
   lastMessageAt: null,
   joinStatus: 'idle' as JoinStatus,
   joinError: null,
+  knownMessageIds: new Set<string>(),
 };
 
 /**
@@ -50,7 +52,7 @@ export const useSessionStore = create<SessionState>()(
         set((state) =>
           state.sessionId === sessionId
             ? { sessionId }
-            : { ...initialState, sessionId },
+            : { ...initialState, sessionId, knownMessageIds: new Set<string>() },
         ),
 
       setSessionInfo: (session) => set({ session }),
@@ -60,14 +62,23 @@ export const useSessionStore = create<SessionState>()(
 
       addMessages: (incoming) =>
         set((state) => {
-          const known = new Set(state.messages.map((message) => message.id));
-          const fresh = incoming.filter((message) => !known.has(message.id));
+          const fresh = incoming.filter((message) => !state.knownMessageIds.has(message.id));
           if (fresh.length === 0) return state;
-          const messages = [...state.messages, ...fresh].sort((a, b) =>
-            a.createdAt.localeCompare(b.createdAt),
-          );
+
+          const nextKnown = new Set(state.knownMessageIds);
+          fresh.forEach((message) => nextKnown.add(message.id));
+
+          let messages = [...state.messages, ...fresh];
+
+          // Only sort if first fresh message is out of order relative to the current tail
+          const tail = state.messages[state.messages.length - 1];
+          if (tail && fresh[0].createdAt < tail.createdAt) {
+            messages.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+          }
+
           return {
             messages,
+            knownMessageIds: nextKnown,
             lastMessageAt: messages[messages.length - 1].createdAt,
           };
         }),

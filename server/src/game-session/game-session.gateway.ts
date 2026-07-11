@@ -30,6 +30,7 @@ import { CharacterSheetService } from '../user/character-sheet.service';
 import { UserProvisioningService } from '../user/user-provisioning.service';
 import { DiceService } from './dice.service';
 import { GameSessionService } from './game-session.service';
+import { AiOrchestrationService } from '../ai/ai-orchestration.service';
 
 export const sessionRoom = (sessionId: string): string =>
   `session:${sessionId}`;
@@ -63,6 +64,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     private readonly gameSessionService: GameSessionService,
     private readonly characterSheetService: CharacterSheetService,
     private readonly diceService: DiceService,
+    private readonly aiOrchestrationService: AiOrchestrationService,
   ) {}
 
   // ADR 2: authenticate in the handshake, before any events flow. A socket.io
@@ -73,6 +75,24 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         .then(() => next())
         .catch((error: Error) => next(error));
     });
+
+    if (server && typeof server.on === 'function') {
+      server.on('connection', (socket) => {
+        const requestTimestamps: number[] = [];
+        socket.use((packet, next) => {
+          const now = Date.now();
+          while (requestTimestamps.length > 0 && requestTimestamps[0] < now - 5000) {
+            requestTimestamps.shift();
+          }
+          if (requestTimestamps.length >= 15) {
+            this.logger.warn(`Socket ${socket.id} throttled: 15 requests per 5s limit exceeded`);
+            return next(new Error('Rate limit exceeded: too many requests'));
+          }
+          requestTimestamps.push(now);
+          next();
+        });
+      });
+    }
   }
 
   handleConnection(socket: Socket): void {
@@ -80,6 +100,32 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     this.logger.log(
       `Socket ${socket.id} connected (user=${user?.id ?? 'unknown'}, recovered=${socket.recovered})`,
     );
+
+    if (socket.recovered) {
+      const token = (socket.handshake.auth as Record<string, unknown>)?.token;
+      if (typeof token === 'string' && token.length > 0) {
+        try {
+          const exp = decodeJwt(token).exp;
+          if (exp) {
+            const msRemaining = exp * 1000 - Date.now();
+            if (msRemaining <= 0) {
+              this.logger.warn(`Recovered socket ${socket.id} has expired token; disconnecting`);
+              socket.disconnect(true);
+              return;
+            }
+            this.scheduleExpiryDisconnect(socket, token);
+          }
+        } catch (error) {
+          this.logger.error(`Failed to verify token expiry on recovered socket: ${error instanceof Error ? error.message : error}`);
+          socket.disconnect(true);
+          return;
+        }
+      } else {
+        this.logger.warn(`Recovered socket ${socket.id} is missing token; disconnecting`);
+        socket.disconnect(true);
+        return;
+      }
+    }
   }
 
   @SubscribeMessage(WS_EVENTS.JOIN_SESSION)
@@ -94,7 +140,20 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       return { success: false, error: parsed.error.issues[0].message };
     }
 
+    const user = getSocketUser(socket);
+    if (!user) {
+      return { success: false, error: 'Unauthorized' };
+    }
+
     try {
+      const isMember = await this.gameSessionService.isMember(
+        parsed.data.sessionId,
+        user.id,
+      );
+      if (!isMember) {
+        return { success: false, error: 'You are not a member of this session' };
+      }
+
       const session = await this.gameSessionService.getSession(
         parsed.data.sessionId,
       );
@@ -107,7 +166,10 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         session.id,
       );
       return { success: true, data: { session, messages, characters } };
-    } catch {
+    } catch (error) {
+      this.logger.error(
+        `Error joining session ${parsed.data.sessionId}: ${error instanceof Error ? error.stack : error}`,
+      );
       return { success: false, error: 'Session not found' };
     }
   }
@@ -139,6 +201,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     // server.to (not socket.to) so the sender receives the broadcast too and
     // the client renders every message through one path.
     this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+    void this.evaluateAiTurns(parsed.data.sessionId);
     return { success: true, data: message };
   }
 
@@ -183,6 +246,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     // The dice result rides the normal chat broadcast so every client renders
     // it through one path (and catch-up replays it unchanged).
     this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+    void this.evaluateAiTurns(parsed.data.sessionId);
     return { success: true, data: message };
   }
 
@@ -233,7 +297,8 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       const authUser = await this.tokenVerifier.verify(token);
       // ADR 8: lazily create the Postgres user row on first connection.
       user = await this.userProvisioning.ensureUser(authUser);
-    } catch {
+    } catch (error) {
+      this.logger.warn(`JWT verification failed for socket ${socket.id}: ${error instanceof Error ? error.stack : error}`);
       throw new Error('Unauthorized');
     }
     (socket.data as SocketData).user = user;
@@ -246,7 +311,8 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     let exp: number | undefined;
     try {
       exp = decodeJwt(token).exp;
-    } catch {
+    } catch (error) {
+      this.logger.error(`Failed to decode JWT to schedule expiry disconnect: ${error instanceof Error ? error.message : error}`);
       return;
     }
     if (!exp) return;
@@ -256,5 +322,26 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       Math.max(exp * 1000 - Date.now(), 0),
     );
     socket.on('disconnect', () => clearTimeout(timer));
+  }
+
+  private async evaluateAiTurns(sessionId: string): Promise<void> {
+    try {
+      await this.aiOrchestrationService.evaluateTurns(
+        sessionId,
+        (message, updatedCharacters) => {
+          const room = sessionRoom(sessionId);
+          this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+          for (const char of updatedCharacters) {
+            this.server.to(room).emit(WS_EVENTS.CHARACTER_UPDATED, char);
+          }
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `AI Orchestration evaluation failed: ${
+          error instanceof Error ? error.stack : error
+        }`,
+      );
+    }
   }
 }

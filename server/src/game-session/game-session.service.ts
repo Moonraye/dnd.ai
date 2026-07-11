@@ -23,9 +23,24 @@ export class GameSessionService {
     dto: CreateLobbyDto,
   ): Promise<SessionSummary> {
     const session = await this.prisma.campaignSession.create({
-      data: { title: dto.title, creatorId },
+      data: {
+        title: dto.title,
+        creatorId,
+        sessionMembers: {
+          create: { userId: creatorId },
+        },
+      },
     });
     return this.toSessionSummary(session);
+  }
+
+  async isMember(sessionId: string, userId: string): Promise<boolean> {
+    const member = await this.prisma.sessionMember.findUnique({
+      where: {
+        userId_sessionId: { userId, sessionId },
+      },
+    });
+    return !!member;
   }
 
   async listLobbies(): Promise<SessionSummary[]> {

@@ -47,7 +47,13 @@ describe('GameSessionService', () => {
     });
 
     expect(sessionCreate).toHaveBeenCalledWith({
-      data: { title: 'Test Lobby', creatorId: 'user-uuid' },
+      data: {
+        title: 'Test Lobby',
+        creatorId: 'user-uuid',
+        sessionMembers: {
+          create: { userId: 'user-uuid' },
+        },
+      },
     });
     expect(result).toEqual({
       id: 'session-uuid',

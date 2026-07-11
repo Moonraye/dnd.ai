@@ -68,7 +68,7 @@ export interface ChatMessagePayload {
 /** Wire representation of a persisted character sheet. */
 export interface CharacterSheetPayload {
   id: string;
-  userId: string;
+  userId: string | null;
   sessionId: string;
   name: string;
   hpCurrent: number;
