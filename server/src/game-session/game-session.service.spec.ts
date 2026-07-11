@@ -152,14 +152,18 @@ describe('GameSessionService', () => {
   });
 
   it('returns recent messages without a createdAt filter when since is omitted', async () => {
-    messageFindMany.mockResolvedValue([]);
+    const msg1 = { ...dbMessage, id: 'm1', messageText: 'first' };
+    const msg2 = { ...dbMessage, id: 'm2', messageText: 'second' };
+    messageFindMany.mockResolvedValue([msg2, msg1]); // returns newest first (desc)
 
-    await service.getMessagesSince('session-uuid');
+    const result = await service.getMessagesSince('session-uuid');
 
     expect(messageFindMany).toHaveBeenCalledWith({
       where: { sessionId: 'session-uuid' },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: 'desc' },
       take: 100,
     });
+    expect(result[0].id).toBe('m1');
+    expect(result[1].id).toBe('m2');
   });
 });

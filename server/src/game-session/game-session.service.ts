@@ -92,10 +92,11 @@ export class GameSessionService {
         sessionId,
         ...(since ? { createdAt: { gt: new Date(since) } } : {}),
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: since ? 'asc' : 'desc' },
       take: RECENT_MESSAGES_LIMIT,
     });
-    return messages.map((message) => this.toChatPayload(message));
+    const payloads = messages.map((message) => this.toChatPayload(message));
+    return since ? payloads : payloads.reverse();
   }
 
   private toSessionSummary(session: CampaignSession): SessionSummary {
