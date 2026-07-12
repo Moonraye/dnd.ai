@@ -66,6 +66,7 @@ describe('CharacterSheetService', () => {
 
   it('creates a human sheet and returns a serialized payload', async () => {
     sessionFindUnique.mockResolvedValue(dbSession);
+    sheetFindMany.mockResolvedValue([]);
     sheetCount.mockResolvedValue(0);
     sheetCreate.mockResolvedValue(dbSheet);
 
@@ -96,6 +97,7 @@ describe('CharacterSheetService', () => {
 
   it('creates an AI-controlled sheet and sets userId to null', async () => {
     sessionFindUnique.mockResolvedValue(dbSession);
+    sheetFindMany.mockResolvedValue([]);
     const dbAiSheet = { ...dbSheet, userId: null, aiProvider: 'google', aiModel: 'gemini-flash-latest' };
     sheetCreate.mockResolvedValue(dbAiSheet);
 
@@ -124,11 +126,77 @@ describe('CharacterSheetService', () => {
 
   it('rejects a second human sheet in the same session', async () => {
     sessionFindUnique.mockResolvedValue(dbSession);
+    sheetFindMany.mockResolvedValue([{ name: 'Thorin', aiProvider: null }]);
     sheetCount.mockResolvedValue(1);
 
     await expect(
       service.createSheet('user-uuid', 'session-uuid', validInput),
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('rejects a second Dungeon Master in the same session', async () => {
+    sessionFindUnique.mockResolvedValue(dbSession);
+    sheetFindMany.mockResolvedValue([
+      { name: 'Dungeon Master', aiProvider: 'google' },
+    ]);
+
+    await expect(
+      service.createSheet('user-uuid', 'session-uuid', {
+        ...validInput,
+        name: 'Dungeon Master',
+        aiProvider: 'google',
+        aiModel: 'gemini-flash-latest',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(sheetCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a sixth player once the party is full', async () => {
+    sessionFindUnique.mockResolvedValue(dbSession);
+    // Five non-DM sheets already fill the party.
+    sheetFindMany.mockResolvedValue(
+      Array.from({ length: 5 }, (_, i) => ({
+        name: `Player ${i}`,
+        aiProvider: i === 0 ? null : 'google',
+      })),
+    );
+
+    await expect(
+      service.createSheet('user-uuid', 'session-uuid', {
+        ...validInput,
+        name: 'Gimli (AI)',
+        aiProvider: 'google',
+        aiModel: 'gemini-flash-latest',
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(sheetCreate).not.toHaveBeenCalled();
+  });
+
+  it('still allows a DM to join when the party is full', async () => {
+    sessionFindUnique.mockResolvedValue(dbSession);
+    sheetFindMany.mockResolvedValue(
+      Array.from({ length: 5 }, (_, i) => ({
+        name: `Player ${i}`,
+        aiProvider: 'google',
+      })),
+    );
+    sheetCreate.mockResolvedValue({
+      ...dbSheet,
+      userId: null,
+      name: 'Dungeon Master',
+      aiProvider: 'google',
+      aiModel: 'gemini-flash-latest',
+    });
+
+    await expect(
+      service.createSheet('user-uuid', 'session-uuid', {
+        ...validInput,
+        name: 'Dungeon Master',
+        aiProvider: 'google',
+        aiModel: 'gemini-flash-latest',
+      }),
+    ).resolves.toBeDefined();
+    expect(sheetCreate).toHaveBeenCalled();
   });
 
   it('merges an HP patch onto the existing sheet', async () => {

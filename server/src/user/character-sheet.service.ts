@@ -11,6 +11,12 @@ import type {
   InventoryItem,
   UpdateCharacterSheetInput,
 } from '@dnd/shared';
+import {
+  MAX_DMS_PER_SESSION,
+  MAX_PLAYERS_PER_SESSION,
+  countSessionRoles,
+  isDungeonMasterSheet,
+} from '@dnd/shared';
 import { Prisma, type CharacterSheet } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -30,6 +36,29 @@ export class CharacterSheetService {
       throw new NotFoundException(`Session ${sessionId} not found`);
     }
     const isAi = input.aiProvider !== null || input.aiModel !== null;
+
+    // Enforce the per-session role caps: one AI Dungeon Master and a party of
+    // up to MAX_PLAYERS_PER_SESSION non-DM sheets (humans + AI companions).
+    const incomingIsDm = isDungeonMasterSheet({
+      name: input.name,
+      aiProvider: input.aiProvider,
+    });
+    const sheets = await this.prisma.characterSheet.findMany({
+      where: { sessionId },
+      select: { name: true, aiProvider: true },
+    });
+    const { dms, players } = countSessionRoles(sheets);
+    if (incomingIsDm) {
+      if (dms >= MAX_DMS_PER_SESSION) {
+        throw new ConflictException(
+          'This session already has a Dungeon Master',
+        );
+      }
+    } else if (players >= MAX_PLAYERS_PER_SESSION) {
+      throw new ConflictException(
+        `This session is full (max ${MAX_PLAYERS_PER_SESSION} players)`,
+      );
+    }
 
     if (!isAi) {
       // Decision 1: at most one human-controlled sheet per user per session.

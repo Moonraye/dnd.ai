@@ -1,6 +1,7 @@
 'use client';
 
 import type { InventoryItem } from '@dnd/shared';
+import { countSessionRoles, MAX_PLAYERS_PER_SESSION } from '@dnd/shared';
 import { useEffect, useState, useMemo } from 'react';
 import {
   useMyCharacter,
@@ -8,6 +9,7 @@ import {
   ABILITY_KEYS,
   ABILITY_LABELS,
 } from '@/features/character-sheet';
+import { useSessionStore } from '@/shared/store/sessionStore';
 import { HpBar } from './HpBar';
 import { PartyStrip } from './PartyStrip';
 import { apiFetch } from '@/shared/api/httpClient';
@@ -19,9 +21,15 @@ interface CharacterHudProps {
 export function CharacterHud({ sessionId }: CharacterHudProps) {
   const { myCharacter } = useMyCharacter();
   const { update, isSaving, error } = useUpdateCharacter(sessionId);
+  const characters = useSessionStore((state) => state.characters);
   const [inventory, setInventory] = useState<Array<InventoryItem & { client_id: string }>>([]);
   const [isAddingAi, setIsAddingAi] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  // Per-session role caps: one DM, up to MAX_PLAYERS_PER_SESSION non-DM sheets.
+  const { dms, players } = countSessionRoles(characters);
+  const dmExists = dms >= 1;
+  const partyFull = players >= MAX_PLAYERS_PER_SESSION;
 
   const addAiDm = async () => {
     setIsAddingAi(true);
@@ -222,7 +230,8 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           <button
             type="button"
             onClick={addAiDm}
-            disabled={isAddingAi}
+            disabled={isAddingAi || dmExists}
+            title={dmExists ? 'This session already has a Dungeon Master' : undefined}
             className="flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs font-semibold hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200"
           >
             Spawn AI DM
@@ -230,12 +239,21 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           <button
             type="button"
             onClick={addAiPlayer}
-            disabled={isAddingAi}
+            disabled={isAddingAi || partyFull}
+            title={
+              partyFull
+                ? `Party is full (max ${MAX_PLAYERS_PER_SESSION} players)`
+                : undefined
+            }
             className="flex-1 rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1.5 text-xs font-semibold hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-200"
           >
             Spawn AI Player
           </button>
         </div>
+        <p className="text-xs text-zinc-500">
+          {players}/{MAX_PLAYERS_PER_SESSION} players
+          {dmExists ? ' · DM present' : ' · no DM yet'}
+        </p>
         {aiError ? (
           <p role="alert" className="text-xs text-red-600">
             {aiError}
