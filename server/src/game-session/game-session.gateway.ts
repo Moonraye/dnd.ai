@@ -31,6 +31,7 @@ import { UserProvisioningService } from '../user/user-provisioning.service';
 import { DiceService } from './dice.service';
 import { GameSessionService } from './game-session.service';
 import { AiOrchestrationService } from '../ai/ai-orchestration.service';
+import { AiTurnScheduler } from '../ai/ai-turn-scheduler.service';
 
 export const sessionRoom = (sessionId: string): string =>
   `session:${sessionId}`;
@@ -65,6 +66,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     private readonly characterSheetService: CharacterSheetService,
     private readonly diceService: DiceService,
     private readonly aiOrchestrationService: AiOrchestrationService,
+    private readonly aiTurnScheduler: AiTurnScheduler,
   ) {}
 
   // ADR 2: authenticate in the handshake, before any events flow. A socket.io
@@ -165,7 +167,11 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       const characters = await this.characterSheetService.listSessionSheets(
         session.id,
       );
-      return { success: true, data: { session, messages, characters } };
+      const stateLog = await this.gameSessionService.getStateLog(session.id);
+      return {
+        success: true,
+        data: { session, messages, characters, stateLog },
+      };
     } catch (error) {
       this.logger.error(
         `Error joining session ${parsed.data.sessionId}: ${error instanceof Error ? error.stack : error}`,
@@ -201,7 +207,9 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     // server.to (not socket.to) so the sender receives the broadcast too and
     // the client renders every message through one path.
     this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
-    void this.evaluateAiTurns(parsed.data.sessionId);
+    this.aiTurnScheduler.requestEvaluation(parsed.data.sessionId, () =>
+      this.evaluateAiTurns(parsed.data.sessionId),
+    );
     return { success: true, data: message };
   }
 
@@ -246,7 +254,9 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     // The dice result rides the normal chat broadcast so every client renders
     // it through one path (and catch-up replays it unchanged).
     this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
-    void this.evaluateAiTurns(parsed.data.sessionId);
+    this.aiTurnScheduler.requestEvaluation(parsed.data.sessionId, () =>
+      this.evaluateAiTurns(parsed.data.sessionId),
+    );
     return { success: true, data: message };
   }
 
@@ -328,11 +338,14 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     try {
       await this.aiOrchestrationService.evaluateTurns(
         sessionId,
-        (message, updatedCharacters) => {
+        (message, updatedCharacters, stateLog) => {
           const room = sessionRoom(sessionId);
           this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
           for (const char of updatedCharacters) {
             this.server.to(room).emit(WS_EVENTS.CHARACTER_UPDATED, char);
+          }
+          if (stateLog) {
+            this.server.to(room).emit(WS_EVENTS.STATE_LOG_UPDATED, stateLog);
           }
         },
       );

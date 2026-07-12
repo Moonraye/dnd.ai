@@ -10,6 +10,8 @@ import type { UserProvisioningService } from '../user/user-provisioning.service'
 import type { DiceService } from './dice.service';
 import { GameSessionGateway } from './game-session.gateway';
 import type { GameSessionService } from './game-session.service';
+import type { AiOrchestrationService } from '../ai/ai-orchestration.service';
+import type { AiTurnScheduler } from '../ai/ai-turn-scheduler.service';
 
 describe('GameSessionGateway', () => {
   const verify = jest.fn();
@@ -25,6 +27,8 @@ describe('GameSessionGateway', () => {
   const emit = jest.fn();
   const to = jest.fn().mockReturnValue({ emit });
   const isMember = jest.fn();
+  const getStateLog = jest.fn();
+  const requestEvaluation = jest.fn();
 
   const sheet: CharacterSheetPayload = {
     id: 'sheet-uuid',
@@ -68,6 +72,7 @@ describe('GameSessionGateway', () => {
     to.mockReturnValue({ emit });
     listSessionSheets.mockResolvedValue([]);
     isMember.mockResolvedValue(true);
+    getStateLog.mockResolvedValue(null);
     gateway = new GameSessionGateway(
       { verify },
       { ensureUser } as unknown as UserProvisioningService,
@@ -77,6 +82,7 @@ describe('GameSessionGateway', () => {
         addChatMessage,
         addSystemMessage,
         isMember,
+        getStateLog,
       } as unknown as GameSessionService,
       {
         listSessionSheets,
@@ -85,6 +91,7 @@ describe('GameSessionGateway', () => {
       } as unknown as CharacterSheetService,
       { roll } as unknown as DiceService,
       { evaluateTurns: jest.fn() } as unknown as AiOrchestrationService,
+      { requestEvaluation } as unknown as AiTurnScheduler,
     );
     gateway.server = { to } as unknown as Server;
   });
@@ -164,9 +171,10 @@ describe('GameSessionGateway', () => {
         '2026-07-10T12:00:00.000Z',
       );
       expect(listSessionSheets).toHaveBeenCalledWith(summary.id);
+      expect(getStateLog).toHaveBeenCalledWith(summary.id);
       expect(result).toEqual({
         success: true,
-        data: { session: summary, messages: [], characters: [] },
+        data: { session: summary, messages: [], characters: [], stateLog: null },
       });
     });
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { DiceRollMetadata } from './dice';
+import type { KeyFact } from './validation';
 import type {
   AbilityScores,
   InventoryItem,
@@ -21,6 +22,8 @@ export const WS_EVENTS = {
   UPDATE_CHARACTER: 'character:update',
   /** server → client broadcast: a character sheet in the room changed. */
   CHARACTER_UPDATED: 'character:updated',
+  /** server → client broadcast: the AI mutated the campaign state log. */
+  STATE_LOG_UPDATED: 'state-log:updated',
 } as const;
 
 export const JoinSessionSchema = z.object({
@@ -79,9 +82,29 @@ export interface CharacterSheetPayload {
   aiModel: string | null;
 }
 
+/**
+ * Wire representation of the AI-maintained campaign memory (GameStateLog).
+ * `campaignSummary` is flattened from the DB's `{ text }` JSON wrapper at the
+ * server boundary so the client sees a plain string.
+ */
+export interface GameStateLogPayload {
+  sessionId: string;
+  activeQuests: string[];
+  npcRelationships: Record<string, string>;
+  campaignSummary: string;
+  /**
+   * Append-only ledger of immutable canon (names, deaths, promises, places),
+   * each tagged with provenance (`dm`-canon vs `player`-claim).
+   */
+  keyFacts: KeyFact[];
+  updatedAt: string;
+}
+
 export interface JoinSessionResult {
   session: SessionSummary;
   messages: ChatMessagePayload[];
   /** Party sheets in the room, so the HUD strip hydrates on join. */
   characters: CharacterSheetPayload[];
+  /** AI campaign memory, so the Campaign Journal hydrates on join. */
+  stateLog: GameStateLogPayload | null;
 }

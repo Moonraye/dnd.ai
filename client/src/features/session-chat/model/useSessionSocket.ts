@@ -5,6 +5,7 @@ import {
   type AckResponse,
   type CharacterSheetPayload,
   type ChatMessagePayload,
+  type GameStateLogPayload,
   type JoinSessionResult,
 } from '@dnd/shared';
 import { useState, useEffect } from 'react';
@@ -58,6 +59,7 @@ export function useSessionSocket(sessionId: string) {
         store.getState().setSessionInfo(response.data.session);
         store.getState().addMessages(response.data.messages);
         store.getState().setCharacters(response.data.characters);
+        store.getState().setStateLog(response.data.stateLog);
         store.getState().setJoinStatus('joined');
       } catch {
         store.getState().setJoinStatus('error', 'Connection timed out');
@@ -71,6 +73,8 @@ export function useSessionSocket(sessionId: string) {
       store.getState().addMessages([message]);
     const onCharacterUpdated = (character: CharacterSheetPayload) =>
       store.getState().upsertCharacter(character);
+    const onStateLogUpdated = (stateLog: GameStateLogPayload) =>
+      store.getState().setStateLog(stateLog);
     const onDisconnect = () => store.getState().setJoinStatus('connecting');
     const onConnectError = () =>
       store.getState().setJoinStatus('error', 'Unable to connect');
@@ -78,6 +82,7 @@ export function useSessionSocket(sessionId: string) {
     socket.on('connect', onConnect);
     socket.on(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
     socket.on(WS_EVENTS.CHARACTER_UPDATED, onCharacterUpdated);
+    socket.on(WS_EVENTS.STATE_LOG_UPDATED, onStateLogUpdated);
     socket.on('disconnect', onDisconnect);
     socket.on('connect_error', onConnectError);
 
@@ -92,6 +97,7 @@ export function useSessionSocket(sessionId: string) {
       socket.off('connect', onConnect);
       socket.off(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
       socket.off(WS_EVENTS.CHARACTER_UPDATED, onCharacterUpdated);
+      socket.off(WS_EVENTS.STATE_LOG_UPDATED, onStateLogUpdated);
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
     };

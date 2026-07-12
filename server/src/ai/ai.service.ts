@@ -5,17 +5,56 @@ import {
   Logger,
 } from '@nestjs/common';
 import { CharacterSheetSchema, type CharacterSheetInput } from '@dnd/shared';
-import type { GoogleGenAI } from '@google/genai';
+import { type GoogleGenAI, type Schema, Type } from '@google/genai';
 import { GENAI_CLIENT } from './genai.provider';
+import { withGeminiRetry } from './gemini-retry';
 
 // ADR 4: Gemini. A one-shot draft generator, not an agent — Phase 5 builds
 // the orchestration on top of this module.
-// `gemini-flash-latest` is a stable alias that tracks the current GA Flash
-// model. Pinned versions (e.g. gemini-2.5-flash) get restricted to
-// "no longer available to new users" over time, which 404s the call.
-const MODEL = 'gemini-flash-latest';
+// `gemini-flash-lite-latest` is a stable alias tracking the current GA
+// Flash-Lite model. Pinned versions (e.g. gemini-2.5-flash) get restricted to
+// "no longer available to new users" over time, which 404s the call, so we
+// stay on a `-latest` alias. Flash-Lite has its own separate free-tier daily
+// quota bucket from full Flash — swap to 'gemini-flash-latest' for richer drafts.
+const MODEL = 'gemini-flash-lite-latest';
 
 const DRAFT_FAILED = 'AI draft failed — try again or fill the form manually';
+
+// Constrains the model to emit type-correct JSON of exactly this shape, so the
+// response always parses. Numeric ranges stay in the Zod re-validation below —
+// responseSchema guarantees structure, CharacterSheetSchema guarantees bounds.
+const DRAFT_RESPONSE_SCHEMA: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    name: { type: Type.STRING },
+    hpCurrent: { type: Type.INTEGER },
+    hpMax: { type: Type.INTEGER },
+    stats: {
+      type: Type.OBJECT,
+      properties: {
+        str: { type: Type.INTEGER },
+        dex: { type: Type.INTEGER },
+        con: { type: Type.INTEGER },
+        int: { type: Type.INTEGER },
+        wis: { type: Type.INTEGER },
+        cha: { type: Type.INTEGER },
+      },
+      required: ['str', 'dex', 'con', 'int', 'wis', 'cha'],
+    },
+    inventory: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          name: { type: Type.STRING },
+          qty: { type: Type.INTEGER },
+        },
+        required: ['name', 'qty'],
+      },
+    },
+  },
+  required: ['name', 'hpCurrent', 'hpMax', 'stats', 'inventory'],
+};
 
 @Injectable()
 export class AiService {
@@ -30,23 +69,25 @@ export class AiService {
   async generateCharacterDraft(prompt: string): Promise<CharacterSheetInput> {
     let raw: string | undefined;
     try {
-      const response = await this.genai.models.generateContent({
-        model: MODEL,
-        contents: prompt,
-        config: {
-          systemInstruction: `You generate D&D 5e characters. Respond with ONLY a JSON object of this exact shape:
-{
-  "name": string (1-50 chars),
-  "hpCurrent": integer >= 0 and <= hpMax,
-  "hpMax": integer >= 1,
-  "stats": { "str": int, "dex": int, "con": int, "int": int, "wis": int, "cha": int } each 1-30,
-  "inventory": [ { "name": string, "qty": integer >= 1 } ]
-}
-Do not include any other fields, commentary, or markdown.`,
-          responseMimeType: 'application/json',
-          maxOutputTokens: 1000,
-        },
-      });
+      const response = await withGeminiRetry(() =>
+        this.genai.models.generateContent({
+          model: MODEL,
+          contents: prompt,
+          config: {
+            systemInstruction:
+              'You generate D&D 5e characters. Fill the provided schema with sensible values: ability scores 1-30, hpMax >= 1, hpCurrent between 0 and hpMax.',
+            responseMimeType: 'application/json',
+            responseSchema: DRAFT_RESPONSE_SCHEMA,
+            // gemini-flash-latest (Gemini 2.5 Flash) enables "thinking" by
+            // default, and those tokens count against maxOutputTokens — leaving
+            // too few for the JSON body, which then truncates mid-object and
+            // fails JSON.parse. Disable thinking (unnecessary for schema-shaped
+            // extraction) and give the body ample room.
+            thinkingConfig: { thinkingBudget: 0 },
+            maxOutputTokens: 2048,
+          },
+        }),
+      );
       raw = response.text;
     } catch (error) {
       this.logger.error('Gemini generateContent call failed', error as Error);

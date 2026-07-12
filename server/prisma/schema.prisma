@@ -91,6 +91,8 @@ model GameStateLog {
   activeQuests     Json            @default("[]")
   npcRelationships Json            @default("{}")
   campaignSummary  Json            @default("{}")
+  // Append-only ledger of immutable canon (names, deaths, promises, places).
+  keyFacts         Json            @default("[]")
   updatedAt        DateTime        @updatedAt
 }
 

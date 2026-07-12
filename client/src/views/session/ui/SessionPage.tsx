@@ -12,6 +12,7 @@ import { ChatInput, ChatWindow, useSessionSocket } from '@/features/session-chat
 import { useAuthStore } from '@/shared/store/authStore';
 import type { JoinStatus } from '@/shared/store/sessionStore';
 import { CharacterHud } from '@/widgets/character-hud';
+import { CampaignJournal } from '@/widgets/campaign-journal';
 
 interface SessionPageProps {
   sessionId: string;
@@ -146,8 +147,9 @@ export function SessionPage({ sessionId }: SessionPageProps) {
               onRollCommand={roll}
             />
           </div>
-          <div className="hidden overflow-y-auto lg:block">
+          <div className="hidden flex-col gap-6 overflow-y-auto lg:flex">
             <CharacterHud sessionId={sessionId} />
+            <CampaignJournal />
           </div>
         </div>
       )}
@@ -160,15 +162,16 @@ export function SessionPage({ sessionId }: SessionPageProps) {
             onClick={() => setHudOpen(false)}
             className="absolute inset-0 bg-black/40"
           />
-          <div className="absolute right-0 top-0 h-full w-80 max-w-[85%] overflow-y-auto bg-white p-4 dark:bg-zinc-950">
+          <div className="absolute right-0 top-0 flex h-full w-80 max-w-[85%] flex-col gap-6 overflow-y-auto bg-white p-4 dark:bg-zinc-950">
             <button
               type="button"
               onClick={() => setHudOpen(false)}
-              className="mb-3 text-sm text-zinc-500"
+              className="text-sm text-zinc-500"
             >
               Close ✕
             </button>
             <CharacterHud sessionId={sessionId} />
+            <CampaignJournal />
           </div>
         </div>
       ) : null}

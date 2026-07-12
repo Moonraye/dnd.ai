@@ -72,15 +72,40 @@ export const GenerateCharacterDraftSchema = z.object({
   prompt: z.string().min(1).max(500),
 });
 
+/**
+ * A single immutable canon fact with provenance (COUNCIL-AUDIT Phase 2):
+ * `dm` = established by the DM/story (authoritative); `player` = asserted by a
+ * player and not independently verified. The tag lets the prompt treat
+ * player-claims skeptically and resists ledger poisoning via chat.
+ */
+export const KeyFactSourceSchema = z.enum(['dm', 'player']);
+export const KeyFactSchema = z.object({
+  text: z.string().min(1).max(200),
+  source: KeyFactSourceSchema,
+});
+export type KeyFactSource = z.infer<typeof KeyFactSourceSchema>;
+export type KeyFact = z.infer<typeof KeyFactSchema>;
+
 export const AiStateUpdateSchema = z.object({
   activeQuests: z.array(z.string().max(200)).max(20).optional(),
-  npcRelationships: z.record(z.string(), z.string().max(100)).optional(),
+  // Bound both key and value, and cap the map size — the model output flows
+  // straight into GameStateLog and is re-broadcast to the whole room.
+  npcRelationships: z
+    .record(z.string().max(60), z.string().max(300))
+    .refine((rels) => Object.keys(rels).length <= 50, {
+      message: 'Too many NPC relationships (max 50)',
+    })
+    .optional(),
   campaignSummary: z.string().max(2000).optional(),
+  // Append-only ledger of immutable canon (names, deaths, promises, places),
+  // each tagged with provenance. The service dedups and caps these; the model
+  // only ever adds new entries.
+  keyFacts: z.array(KeyFactSchema).max(100).optional(),
   hpChanges: z
     .array(
       z.object({
         characterName: z.string().max(50),
-        delta: z.number().int().min(-9999).max(9999),
+        delta: z.number().int().min(-999).max(999),
       }),
     )
     .max(10)
@@ -90,10 +115,10 @@ export const AiStateUpdateSchema = z.object({
       z.object({
         characterName: z.string().max(50),
         item: z.string().max(60),
-        qty: z.number().int().min(-9999).max(9999),
+        qty: z.number().int().min(-99).max(99),
       }),
     )
-    .max(20)
+    .max(10)
     .optional(),
 });
 

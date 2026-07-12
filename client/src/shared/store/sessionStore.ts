@@ -1,6 +1,7 @@
 import type {
   CharacterSheetPayload,
   ChatMessagePayload,
+  GameStateLogPayload,
   SessionSummary,
 } from '@dnd/shared';
 import { create } from 'zustand';
@@ -14,6 +15,8 @@ interface SessionState {
   messages: ChatMessagePayload[];
   /** Party sheets in the room, feeding the HUD and party strip. */
   characters: CharacterSheetPayload[];
+  /** AI campaign memory, feeding the Campaign Journal. */
+  stateLog: GameStateLogPayload | null;
   /** ISO timestamp of the newest received message (ADR 6 catch-up cursor). */
   lastMessageAt: string | null;
   joinStatus: JoinStatus;
@@ -25,6 +28,7 @@ interface SessionState {
   addMessages: (incoming: ChatMessagePayload[]) => void;
   setCharacters: (characters: CharacterSheetPayload[]) => void;
   upsertCharacter: (character: CharacterSheetPayload) => void;
+  setStateLog: (stateLog: GameStateLogPayload | null) => void;
   reset: () => void;
 }
 
@@ -33,6 +37,7 @@ const initialState = {
   session: null,
   messages: [],
   characters: [] as CharacterSheetPayload[],
+  stateLog: null as GameStateLogPayload | null,
   lastMessageAt: null,
   joinStatus: 'idle' as JoinStatus,
   joinError: null,
@@ -97,6 +102,8 @@ export const useSessionStore = create<SessionState>()(
           characters[index] = character;
           return { characters };
         }),
+
+      setStateLog: (stateLog) => set({ stateLog }),
 
       reset: () => set(initialState),
     }),

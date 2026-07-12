@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   ChatMessagePayload,
   DiceRollMetadata,
+  GameStateLogPayload,
   SessionSummary,
 } from '@dnd/shared';
 import type {
@@ -10,6 +11,7 @@ import type {
   Prisma,
 } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { toStateLogPayload } from '../ai/game-state-log.mapper';
 import type { CreateLobbyDto } from './dto/create-lobby.dto';
 
 const RECENT_MESSAGES_LIMIT = 100;
@@ -112,6 +114,17 @@ export class GameSessionService {
     });
     const payloads = messages.map((message) => this.toChatPayload(message));
     return since ? payloads : payloads.reverse();
+  }
+
+  /**
+   * The AI-maintained campaign memory for a session, or null if the AI has not
+   * written any state yet. Hydrates the Campaign Journal on join.
+   */
+  async getStateLog(sessionId: string): Promise<GameStateLogPayload | null> {
+    const log = await this.prisma.gameStateLog.findUnique({
+      where: { sessionId },
+    });
+    return log ? toStateLogPayload(log) : null;
   }
 
   private toSessionSummary(session: CampaignSession): SessionSummary {
