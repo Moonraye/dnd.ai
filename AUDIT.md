@@ -2,6 +2,7 @@
 
 **Date:** 2026-07-11 · **Scope:** `client/` (Next.js 16), `server/` (NestJS 11), `packages/shared/` (Zod), repo config.
 **Branch audited:** `feat/phase-3-realtime-backbone` (including untracked Phase-4 files on disk).
+**Last updated:** 2026-07-12 — resolved items removed; this file now tracks **outstanding work only**. See git history for what was fixed and how (`3410f16`, `dbd16d4`, `7531ad0`).
 
 ## Summary
 
@@ -9,13 +10,12 @@ The hand-written code is unusually clean: no `TODO`/`FIXME`, no `any`, no `@ts-i
 
 **Severity legend:** 🔴 High · 🟠 Medium · 🟡 Low · ℹ️ Info
 
-### Top 5 priorities
+### Top priorities (remaining)
 
-1. **SEC-1** — No session membership model: anyone with a session UUID gets full access.
-2. **SEC-2** — Zero rate limiting, including the paid Gemini endpoint (cost-abuse vector).
-3. **SEC-3** — Unbounded fields in shared Zod schemas (DoS / DB bloat) — fix before Phase 5 AI writes.
-4. **PERF-1..3** — The slow page load: fully client-rendered SPA that renders a blank screen behind a serial auth → socket → join waterfall.
-5. **BUG-1** — Joining a long session returns the **oldest** 100 messages instead of the most recent.
+1. **SEC-1** — No session membership model: anyone with a session UUID gets full access. _(A membership check now guards `JOIN_SESSION`; revisit whether REST endpoints taking a `sessionId` are equally covered.)_
+2. **PERF-1..3** — The slow page load: fully client-rendered SPA that renders a blank screen behind a serial auth → socket → join waterfall.
+
+_Resolved since last audit: **SEC-2** (helmet + global `@nestjs/throttler`, per-`/ai` `@Throttle`, `maxOutputTokens`, per-socket gateway limit, and the Phase-5 `AiTurnScheduler` closing the WS-triggered AI-turn cost surface) and **SEC-3** (shared Zod schemas bounded, including the AI-write `AiStateUpdateSchema`)._
 
 ---
 
@@ -30,30 +30,13 @@ The hand-written code is unusually clean: no `TODO`/`FIXME`, no `any`, no `@ts-i
 **Impact:** Unauthorized access to private game content; impersonation-adjacent chat in someone else's session.
 **Fix:** Add a `SessionMember` (or participant) relation in Prisma. On `JOIN_SESSION`, either verify membership or implement an explicit join/invite flow (invite code, creator approval, or open/closed lobby flag). Apply the same check to `listSessionSheets` and REST endpoints that take a `sessionId`.
 
-### SEC-2 🔴 No rate limiting anywhere (Gemini endpoint = cost abuse)
+### SEC-2 ✅ RESOLVED — Rate limiting & LLM cost-abuse
 
-**Where:** whole server — no `@nestjs/throttler`, no `helmet` in `server/package.json`; worst on `server/src/ai/ai.controller.ts:12-17` (`POST /ai/character-draft`).
+Closed across several commits: `helmet` secures Express headers (`server/src/main.ts:10`); `@nestjs/throttler` is registered globally with a `ThrottlerGuard` (`server/src/app.module.ts`) and a stricter per-route `@Throttle` on `POST /ai/character-draft` (`server/src/ai/ai.controller.ts`); both Gemini calls cap `maxOutputTokens` (`ai.service.ts:47`, `ai-orchestration.service.ts:182`); the gateway enforces a per-socket event limit (15 req / 5s). Phase 5 added `AiTurnScheduler` (`server/src/ai/ai-turn-scheduler.service.ts`) — a per-session 15s cooldown with trailing debounce — closing the last cost surface: WS chat/dice events fanning out into unbounded paid AI-turn evaluations.
 
-Every REST route, the WS gateway, and the AI endpoint are auth-gated but unbounded. A single authenticated user can loop `POST /ai/character-draft` and burn Gemini quota/money, or flood chat/dice events. The AI call also sets no output-token cap in its `config` (`server/src/ai/ai.service.ts:43-47`), only `responseMimeType`.
+### SEC-3 ✅ RESOLVED — Unbounded inputs in shared Zod schemas
 
-**Impact:** Denial of wallet (LLM billing), chat spam, DB write floods.
-**Fix:** Add `@nestjs/throttler` globally (e.g., 10 req/min default), a much stricter per-user limit on `/ai/*` (e.g., 5/min + daily cap), a `maxOutputTokens` in the Gemini config, and a simple per-socket event rate limit in the gateway (chat/dice per second). Add `helmet` while at it.
-
-### SEC-3 🔴 Unbounded inputs in shared Zod schemas
-
-**Where:** `packages/shared/src/validation.ts`
-
-| Line | Field | Problem |
-|---|---|---|
-| `:21` | `InventoryItemSchema.name` | `z.string().min(1)` — no `.max()`; megabyte-scale item names accepted |
-| `:31`, `:60` | `inventory` array (create + update) | no `.max()` on array length — unbounded JSON persisted to `CharacterSheet` |
-| `:33-34` | `aiProvider` / `aiModel` | `z.string().min(1)` — no `.max()` |
-| `:28-29`, `:58-59` | `hpCurrent` / `hpMax` | only lower bounds; both accept `Number.MAX_SAFE_INTEGER` (the `hpCurrent <= hpMax` refine doesn't cap either) |
-
-Everything else is properly bounded (lobby title max 80, chat max 2000, AI prompt max 500, ability scores 1–30), so these are the outliers.
-
-**Impact:** DoS / DB bloat via giant payloads; broadcast amplification (an oversized sheet is re-emitted to the whole room on every update). This becomes more dangerous in Phase 5 when AI output is written through the same schemas.
-**Fix:** `name: .max(60)`, `inventory: .max(50)` items, `aiProvider/aiModel: .max(100)`, `hpCurrent/hpMax: .max(9999)` (or similar sane caps).
+`packages/shared/src/validation.ts` is now bounded throughout: `InventoryItemSchema.name` (`.max(60)`), both `inventory` arrays (`.max(50)`), `aiProvider`/`aiModel` (`.max(100)`), `hpCurrent`/`hpMax` (`.max(9999)`), and the AI-write `AiStateUpdateSchema` (quest count/length, NPC map size + key/value lengths, summary length, and hp/inventory delta caps) — so validated AI output can no longer write megabyte JSON into `GameStateLog`/`CharacterSheet` or amplify it over the `STATE_LOG_UPDATED` broadcast.
 
 ### SEC-4 🟠 CORS fail-open when `CLIENT_URL` is unset
 
@@ -92,7 +75,7 @@ A dropped socket resumes with its old `socket.data.user` without re-running the 
 
 **Where:** `server/src/ai/ai.service.ts:45`
 
-User text is concatenated directly after the schema instructions: `contents: \`${SCHEMA_INSTRUCTIONS}${prompt}\``. The blast radius is currently well-fenced — the output is `JSON.parse`d, re-validated against `CharacterSheetSchema`, `aiProvider`/`aiModel` are force-nulled, and nothing is persisted — so this is informational today. It becomes real in Phase 5 when model output starts mutating `GameStateLog`.
+User text is concatenated directly after the schema instructions: `contents: \`${SCHEMA_INSTRUCTIONS}${prompt}\``. The blast radius is currently well-fenced — the output is `JSON.parse`d, re-validated against `CharacterSheetSchema`, `aiProvider`/`aiModel`are force-nulled, and nothing is persisted — so this is informational today. It becomes real in Phase 5 when model output starts mutating`GameStateLog`.
 
 Also: on parse failures the **full raw model output is logged** (`ai.service.ts:63,79`) — user-influenced content in logs; keep, but truncate.
 
@@ -138,6 +121,7 @@ Load flow for `/session/[id]`:
 5. `emitWithAck(JOIN_SESSION)` (5s timeout) — only when the ack returns does `joinStatus` become `joined`; until then inputs are disabled and the title says "Loading session…".
 
 **Fixes, in impact order:**
+
 1. **Render a skeleton instead of `null`** at `SessionPage.tsx:40` / `LobbyPage.tsx:17` — cheapest fix, removes the "broken blank page" feeling entirely.
 2. Cache the session token so the socket `auth` callback doesn't re-await `getSession()` (read from the auth store populated in step 2, falling back to `getSession()` only when empty).
 3. Longer-term: server-render the session shell (title, layout) and stream it; keep only chat/socket parts client-side.
@@ -174,14 +158,6 @@ Every incoming message (including each of up to 100 catch-up messages) rebuilds 
 ---
 
 ## 🐛 Bugs / correctness
-
-### BUG-1 🔴 Fresh join returns the *oldest* 100 messages, not the recent ones
-
-**Where:** `server/src/game-session/game-session.service.ts:86-98` (`getMessagesSince`)
-
-With no `since` cursor (a brand-new join into an existing session), the query is `orderBy: { createdAt: 'asc' }, take: 100` — the **first 100 messages ever written**. In any session with >100 messages a new joiner sees ancient history and silently misses everything current; the constant is even named `RECENT_MESSAGES_LIMIT`. There is also no pagination for older history.
-
-**Fix:** For the no-cursor case query `orderBy: { createdAt: 'desc' }, take: 100` and reverse in memory. Add a cursor param for "load older" later.
 
 ### BUG-2 🟠 Race condition on "one character per user per session"
 
@@ -225,11 +201,6 @@ Inventory rows are keyed by array index while being editable/deletable — delet
 
 ## 🧹 Kludges & repo hygiene
 
-### KLUDGE-1 🟠 Generated Prisma client committed to git
-
-`server/src/generated/prisma/**` (13 tracked files) is machine-generated by `npx prisma generate`, yet committed — it shows up as modified in almost every diff (see current `git status`), is a merge-conflict magnet, and bloats reviews.
-**Fix:** Add `server/src/generated/` to `.gitignore`, `git rm -r --cached server/src/generated`, and rely on `prisma generate` in the build (add it to a `postinstall`/`prebuild` script).
-
 ### KLUDGE-2 🟠 Not a real workspace monorepo
 
 There is no root `package.json` / workspace config; `client` and `server` consume `@dnd/shared` via `file:../packages/shared` and the README instructs running `npm install` three times. No unified lint/test/build, no CI. Also: `@types/node` is `^24` on the server but `^20` on the client, and no package pins `engines`.
@@ -259,12 +230,12 @@ Rooms and `socket.data` live in one Node process with the default in-memory adap
 
 Existing tests are decent (8 server specs, 8 client tests), but the riskiest paths are the untested ones:
 
-| Gap | Why it matters |
-|---|---|
-| `server/src/auth/verifiers/jwks-token.verifier.ts` — **no spec** (only the HS256 verifier is tested) | This is the **production** auth path (per memory, ES256/JWKS is what your Supabase project actually uses) |
-| `packages/shared` has **no test runner at all** — `dice.ts` parser untested in its own package | The parser is the DoS boundary for dice input; its limits (max 50 dice, 10 terms) deserve direct tests |
-| `client`: `useSessionSocket`, `ChatWindow`, `useAuthListener`, entire `shared/api/` (`httpClient`, `socketClient`, `supabaseClient`), `authStore` | The connect/join/recover lifecycle is the most complex client logic and has zero coverage |
-| Gateway authorization behaviors (join-before-chat, ownership) exist, but there's no test for the *missing* membership check (SEC-1) — write it when the feature lands | Locks in the fix |
+| Gap                                                                                                                                                                   | Why it matters                                                                                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `server/src/auth/verifiers/jwks-token.verifier.ts` — **no spec** (only the HS256 verifier is tested)                                                                  | This is the **production** auth path (per memory, ES256/JWKS is what your Supabase project actually uses) |
+| `packages/shared` has **no test runner at all** — `dice.ts` parser untested in its own package                                                                        | The parser is the DoS boundary for dice input; its limits (max 50 dice, 10 terms) deserve direct tests    |
+| `client`: `useSessionSocket`, `ChatWindow`, `useAuthListener`, entire `shared/api/` (`httpClient`, `socketClient`, `supabaseClient`), `authStore`                     | The connect/join/recover lifecycle is the most complex client logic and has zero coverage                 |
+| Gateway authorization behaviors (join-before-chat, ownership) exist, but there's no test for the _missing_ membership check (SEC-1) — write it when the feature lands | Locks in the fix                                                                                          |
 
 ---
 
