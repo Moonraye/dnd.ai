@@ -1,17 +1,24 @@
 import Link from 'next/link';
-import { SignUpForm } from '@/features/auth';
+import { AuthShell, SignUpForm } from '@/features/auth';
 
 export default function SignUpPage() {
   return (
-    <main className="flex flex-1 flex-col items-center justify-center gap-6 p-8">
-      <h1 className="text-2xl font-semibold">Join DunDrAI</h1>
+    <AuthShell
+      title="Create your account"
+      subtitle="Name your adventurer and take a seat at the table."
+      footer={
+        <>
+          Already have an account?{' '}
+          <Link
+            href="/login"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Sign in
+          </Link>
+        </>
+      }
+    >
       <SignUpForm />
-      <p className="text-sm text-zinc-500">
-        Already have an account?{' '}
-        <Link href="/login" className="underline">
-          Sign in
-        </Link>
-      </p>
-    </main>
+    </AuthShell>
   );
 }

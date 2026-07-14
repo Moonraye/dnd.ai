@@ -32,6 +32,7 @@ export const CharacterSheetSchema = z
     // ADR 4: AI-controlled sheets carry a provider/model pair; both null = human.
     aiProvider: z.string().min(1).max(100).nullable().default(null),
     aiModel: z.string().min(1).max(100).nullable().default(null),
+    persona: z.string().max(1000).nullable().default(null),
   })
   .refine((s) => s.hpCurrent <= s.hpMax, {
     message: 'hpCurrent cannot exceed hpMax',
@@ -42,9 +43,13 @@ export const CharacterSheetSchema = z
     path: ['aiModel'],
   });
 
+export const ChatVisibilitySchema = z.enum(['PUBLIC', 'WHISPER']);
+
 export const SendChatMessageSchema = z.object({
   sessionId: z.uuid(),
   messageText: z.string().min(1).max(2000),
+  command: z.enum(['SAY', 'SHOUT', 'WHISPER']).nullable().optional(),
+  targetId: z.string().uuid().nullable().optional(),
 });
 
 /**
@@ -65,6 +70,42 @@ export const UpdateCharacterSheetSchema = z
       patch.hpMax !== undefined ||
       patch.inventory !== undefined,
     { message: 'Provide at least one field to update' },
+  );
+
+/**
+ * Companion edit schema (name, persona, stats, HP max/current, inventory).
+ * Enforces that at least one field is provided, and hpCurrent <= hpMax if both are present.
+ */
+export const EditCharacterSheetSchema = z
+  .object({
+    name: z.string().min(1).max(50).optional(),
+    persona: z.string().max(1000).nullable().optional(),
+    hpCurrent: z.number().int().min(0).max(9999).optional(),
+    hpMax: z.number().int().min(1).max(9999).optional(),
+    stats: AbilityScoresSchema.optional(),
+    inventory: z.array(InventoryItemSchema).max(50).optional(),
+  })
+  .refine(
+    (patch) =>
+      patch.name !== undefined ||
+      patch.persona !== undefined ||
+      patch.hpCurrent !== undefined ||
+      patch.hpMax !== undefined ||
+      patch.stats !== undefined ||
+      patch.inventory !== undefined,
+    { message: 'Provide at least one field to edit' },
+  )
+  .refine(
+    (s) => {
+      if (s.hpCurrent !== undefined && s.hpMax !== undefined) {
+        return s.hpCurrent <= s.hpMax;
+      }
+      return true;
+    },
+    {
+      message: 'hpCurrent cannot exceed hpMax',
+      path: ['hpCurrent'],
+    },
   );
 
 /** Free-text concept the AI turns into a draft character sheet (ADR 4). */
@@ -125,4 +166,14 @@ export const AiStateUpdateSchema = z.object({
 export const AiResponseSchema = z.object({
   messageText: z.string().min(1).max(3000),
   stateUpdate: AiStateUpdateSchema.optional(),
+  diceRolls: z
+    .array(
+      z.object({
+        characterName: z.string().max(50),
+        notation: z.string().max(30),
+        reason: z.string().max(200),
+      }),
+    )
+    .max(5)
+    .optional(),
 });

@@ -16,11 +16,17 @@ export function useSendChat(sessionId: string) {
   const [error, setError] = useState<string | null>(null);
 
   const send = useCallback(
-    async (messageText: string): Promise<boolean> => {
+    async (
+      messageText: string,
+      command?: 'SAY' | 'SHOUT' | 'WHISPER' | null,
+      targetId?: string | null,
+    ): Promise<boolean> => {
       // ADR 3: same shared schema the gateway validates with.
       const parsed = SendChatMessageSchema.safeParse({
         sessionId,
         messageText,
+        command,
+        targetId,
       });
       if (!parsed.success) {
         setError(parsed.error.issues[0].message);

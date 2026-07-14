@@ -31,6 +31,23 @@ export async function signOut(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
+/**
+ * Starts the Google OAuth flow. Supabase redirects the browser to Google and
+ * back to `/auth/callback`, where the session is picked up. On success this
+ * never returns (the browser navigates away).
+ */
+export async function signInWithGoogle(): Promise<void> {
+  const redirectTo =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/auth/callback`
+      : undefined;
+  const { error } = await getSupabaseClient().auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo },
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function getSession(): Promise<Session | null> {
   const { data, error } = await getSupabaseClient().auth.getSession();
   if (error) throw new Error(error.message);

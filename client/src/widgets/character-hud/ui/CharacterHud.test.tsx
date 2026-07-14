@@ -26,6 +26,8 @@ const character: CharacterSheetPayload = {
   inventory: [],
   aiProvider: null,
   aiModel: null,
+  ownerId: null,
+  persona: null,
 };
 
 describe('CharacterHud', () => {

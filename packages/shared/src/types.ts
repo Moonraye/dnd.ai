@@ -8,9 +8,11 @@ import type {
   CharacterSheetSchema,
   SendChatMessageSchema,
   UpdateCharacterSheetSchema,
+  EditCharacterSheetSchema,
   GenerateCharacterDraftSchema,
   AiStateUpdateSchema,
   AiResponseSchema,
+  ChatVisibilitySchema,
 } from './validation';
 
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
@@ -23,8 +25,12 @@ export type SendChatMessageInput = z.infer<typeof SendChatMessageSchema>;
 export type UpdateCharacterSheetInput = z.infer<
   typeof UpdateCharacterSheetSchema
 >;
+export type EditCharacterSheetInput = z.infer<
+  typeof EditCharacterSheetSchema
+>;
 export type GenerateCharacterDraftInput = z.infer<
   typeof GenerateCharacterDraftSchema
 >;
 export type AiStateUpdate = z.infer<typeof AiStateUpdateSchema>;
 export type AiResponse = z.infer<typeof AiResponseSchema>;
+export type ChatVisibility = z.infer<typeof ChatVisibilitySchema>;

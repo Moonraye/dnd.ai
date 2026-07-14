@@ -18,6 +18,7 @@ import {
   type CharacterSheetPayload,
   type ChatMessagePayload,
   type JoinSessionResult,
+  ChatVisibility,
 } from '@dnd/shared';
 import { decodeJwt } from 'jose';
 import type { Server, Socket } from 'socket.io';
@@ -32,6 +33,7 @@ import { DiceService } from './dice.service';
 import { GameSessionService } from './game-session.service';
 import { AiOrchestrationService } from '../ai/ai-orchestration.service';
 import { AiTurnScheduler } from '../ai/ai-turn-scheduler.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 export const sessionRoom = (sessionId: string): string =>
   `session:${sessionId}`;
@@ -44,8 +46,24 @@ interface SocketData {
 const getSocketUser = (socket: Socket): User | undefined =>
   (socket.data as SocketData).user;
 
+/**
+ * Fail closed: `?? true` would silently accept WebSocket connections from ANY
+ * origin whenever CLIENT_URL is missing/misconfigured. Production must be
+ * explicit; dev falls back to the local Next.js origin only.
+ */
+const resolveCorsOrigin = (): string => {
+  const clientUrl = process.env.CLIENT_URL;
+  if (clientUrl) return clientUrl;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'CLIENT_URL must be set for the game session gateway CORS policy',
+    );
+  }
+  return 'http://localhost:3000';
+};
+
 @WebSocketGateway({
-  cors: { origin: process.env.CLIENT_URL ?? true },
+  cors: { origin: resolveCorsOrigin() },
   // ADR 6: brief drops keep rooms + socket.data and replay missed packets.
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000,
@@ -67,6 +85,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     private readonly diceService: DiceService,
     private readonly aiOrchestrationService: AiOrchestrationService,
     private readonly aiTurnScheduler: AiTurnScheduler,
+    private readonly prisma: PrismaService,
   ) {}
 
   // ADR 2: authenticate in the handshake, before any events flow. A socket.io
@@ -76,6 +95,47 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       void this.authenticateSocket(socket)
         .then(() => next())
         .catch((error: Error) => next(error));
+    });
+
+    this.aiTurnScheduler.registerSilenceCallback(async (sessionId) => {
+      const room = sessionRoom(sessionId);
+      const sockets = await this.server.in(room).fetchSockets();
+      const hasHumanSockets = sockets.some((s) => {
+        const user = getSocketUser(s as any);
+        return !!user;
+      });
+
+      if (!hasHumanSockets) return;
+
+      if (!this.aiTurnScheduler.canInitiateUnprompted(sessionId)) return;
+
+      const aiSheets = await this.prisma.characterSheet.findMany({
+        where: { sessionId, aiProvider: { not: null } },
+      });
+
+      if (aiSheets.length === 0) return;
+
+      const companions = aiSheets.filter((s) => {
+        const nameLower = s.name.toLowerCase();
+        return !nameLower.includes('dm') && !nameLower.includes('dungeon master');
+      });
+
+      const chosenSheet = companions.length > 0
+        ? companions[Math.floor(Math.random() * companions.length)]
+        : aiSheets[Math.floor(Math.random() * aiSheets.length)];
+
+      this.aiTurnScheduler.recordUnpromptedCall(sessionId);
+
+      this.server.to(room).emit(WS_EVENTS.AI_THINKING, {
+        characterId: chosenSheet.id,
+        thinking: true,
+      });
+
+      this.aiTurnScheduler.requestEvaluation(
+        sessionId,
+        () => this.evaluateAiTurns(sessionId, chosenSheet.id),
+        { isTargeted: true, targetId: chosenSheet.id },
+      );
     });
 
     if (server && typeof server.on === 'function') {
@@ -199,17 +259,139 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     if (!user) {
       return { success: false, error: 'Unauthorized' };
     }
+
+    const { command, targetId, messageText } = parsed.data;
+
+    let visibility: ChatVisibility = 'PUBLIC';
+    let recipientUserId: string | null = null;
+    let recipientCharacterId: string | null = null;
+    let recipientName: string | null = null;
+    let isTargeted = false;
+
+    const senderSheet = await this.characterSheetService.getOwnSheet(
+      user.id,
+      parsed.data.sessionId,
+    );
+
+    if (command && targetId) {
+      isTargeted = true;
+      const targetSheet = await this.prisma.characterSheet.findUnique({
+        where: { id: targetId },
+      });
+
+      if (targetSheet) {
+        recipientCharacterId = targetSheet.id;
+        recipientUserId = targetSheet.userId;
+        recipientName = targetSheet.name;
+      } else {
+        const targetUser = await this.prisma.user.findUnique({
+          where: { id: targetId },
+        });
+        if (targetUser) {
+          recipientUserId = targetUser.id;
+          recipientName = targetUser.username || targetUser.email || 'Player';
+          const sheet = await this.characterSheetService.getOwnSheet(
+            targetUser.id,
+            parsed.data.sessionId,
+          );
+          if (sheet) {
+            recipientCharacterId = sheet.id;
+            recipientName = sheet.name;
+          }
+        } else {
+          return { success: false, error: 'Target recipient not found' };
+        }
+      }
+
+      if (command === 'WHISPER') {
+        visibility = 'WHISPER';
+      }
+    }
+
+    const senderName = senderSheet
+      ? senderSheet.name
+      : user.username ?? user.email ?? 'Player';
+
     const message = await this.gameSessionService.addChatMessage(
       parsed.data.sessionId,
-      user.username ?? user.email ?? 'Player',
-      parsed.data.messageText,
+      senderName,
+      messageText,
+      {
+        senderType: 'HUMAN',
+        visibility,
+        senderUserId: user.id,
+        senderCharacterId: senderSheet?.id ?? null,
+        recipientUserId,
+        recipientCharacterId,
+        recipientName,
+      },
     );
-    // server.to (not socket.to) so the sender receives the broadcast too and
-    // the client renders every message through one path.
-    this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
-    this.aiTurnScheduler.requestEvaluation(parsed.data.sessionId, () =>
-      this.evaluateAiTurns(parsed.data.sessionId),
-    );
+
+    const dbMsg = await this.prisma.chatMessage.findUnique({
+      where: { id: message.id },
+    });
+
+    if (visibility === 'WHISPER') {
+      const sockets = await this.server.in(room).fetchSockets();
+      for (const s of sockets) {
+        const socketUser = getSocketUser(s as any);
+        if (socketUser && dbMsg) {
+          const payload = this.gameSessionService.toChatPayload(dbMsg, socketUser.id);
+          s.emit(WS_EVENTS.CHAT_MESSAGE, payload);
+        }
+      }
+    } else {
+      this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+    }
+
+    const isAiTarget = recipientCharacterId && !recipientUserId;
+
+    if (isAiTarget) {
+      // Emit thinking indicator
+      this.server.to(room).emit(WS_EVENTS.AI_THINKING, {
+        characterId: recipientCharacterId,
+        thinking: true,
+      });
+
+      if (command === 'SHOUT') {
+        // Shout triggers target AI and may trigger DM
+        this.aiTurnScheduler.requestEvaluation(
+          parsed.data.sessionId,
+          () => this.evaluateAiTurns(parsed.data.sessionId, recipientCharacterId || undefined),
+          { isTargeted: true, targetId: recipientCharacterId || undefined },
+        );
+
+        const dmSheet = await this.prisma.characterSheet.findFirst({
+          where: { sessionId: parsed.data.sessionId, name: 'Dungeon Master' },
+        });
+        if (dmSheet) {
+          // Emit thinking indicator for DM
+          this.server.to(room).emit(WS_EVENTS.AI_THINKING, {
+            characterId: dmSheet.id,
+            thinking: true,
+          });
+
+          this.aiTurnScheduler.requestEvaluation(
+            parsed.data.sessionId,
+            () => this.evaluateAiTurns(parsed.data.sessionId, dmSheet.id),
+            { isTargeted: true, targetId: dmSheet.id },
+          );
+        }
+      } else {
+        // SAY or WHISPER triggers only the target AI
+        this.aiTurnScheduler.requestEvaluation(
+          parsed.data.sessionId,
+          () => this.evaluateAiTurns(parsed.data.sessionId, recipientCharacterId || undefined),
+          { isTargeted: true, targetId: recipientCharacterId || undefined },
+        );
+      }
+    } else {
+      // Normal chat message: evaluate DM/players naturally
+      this.aiTurnScheduler.requestEvaluation(parsed.data.sessionId, () =>
+        this.evaluateAiTurns(parsed.data.sessionId),
+      );
+    }
+
     return { success: true, data: message };
   }
 
@@ -334,13 +516,33 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     socket.on('disconnect', () => clearTimeout(timer));
   }
 
-  private async evaluateAiTurns(sessionId: string): Promise<void> {
+  private async evaluateAiTurns(
+    sessionId: string,
+    forceAgentId?: string,
+  ): Promise<void> {
+    const room = sessionRoom(sessionId);
     try {
       await this.aiOrchestrationService.evaluateTurns(
         sessionId,
-        (message, updatedCharacters, stateLog) => {
-          const room = sessionRoom(sessionId);
-          this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+        async (message, updatedCharacters, stateLog) => {
+          if (message.visibility === 'WHISPER') {
+            const dbMsg = await this.prisma.chatMessage.findUnique({
+              where: { id: message.id },
+            });
+            if (dbMsg) {
+              const sockets = await this.server.in(room).fetchSockets();
+              for (const s of sockets) {
+                const socketUser = getSocketUser(s as any);
+                if (socketUser) {
+                  const payload = this.gameSessionService.toChatPayload(dbMsg, socketUser.id);
+                  s.emit(WS_EVENTS.CHAT_MESSAGE, payload);
+                }
+              }
+            }
+          } else {
+            this.server.to(room).emit(WS_EVENTS.CHAT_MESSAGE, message);
+          }
+
           for (const char of updatedCharacters) {
             this.server.to(room).emit(WS_EVENTS.CHARACTER_UPDATED, char);
           }
@@ -348,6 +550,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
             this.server.to(room).emit(WS_EVENTS.STATE_LOG_UPDATED, stateLog);
           }
         },
+        forceAgentId,
       );
     } catch (error) {
       this.logger.error(
@@ -355,6 +558,13 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
           error instanceof Error ? error.stack : error
         }`,
       );
+    } finally {
+      if (forceAgentId) {
+        this.server.to(room).emit(WS_EVENTS.AI_THINKING, {
+          characterId: forceAgentId,
+          thinking: false,
+        });
+      }
     }
   }
 }

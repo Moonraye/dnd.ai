@@ -20,6 +20,10 @@ const MODEL = 'gemini-flash-lite-latest';
 
 const DRAFT_FAILED = 'AI draft failed — try again or fill the form manually';
 
+// Client-side abort for stalled upstream calls; withGeminiRetry only fires
+// once a request rejects, so without this a hung request blocks forever.
+const GEMINI_TIMEOUT_MS = 30_000;
+
 // Constrains the model to emit type-correct JSON of exactly this shape, so the
 // response always parses. Numeric ranges stay in the Zod re-validation below —
 // responseSchema guarantees structure, CharacterSheetSchema guarantees bounds.
@@ -85,6 +89,7 @@ export class AiService {
             // extraction) and give the body ample room.
             thinkingConfig: { thinkingBudget: 0 },
             maxOutputTokens: 2048,
+            httpOptions: { timeout: GEMINI_TIMEOUT_MS },
           },
         }),
       );

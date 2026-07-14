@@ -16,22 +16,21 @@ This document provides guidance for using Claude Code (claude.ai/code) with this
 ## Code Structure
 
 This is Monorepo structure:
-├── apps/
-│ ├── frontend/ # Next.js application (using FSD inside /src)
-│ │ ├── src/
-│ │ │ ├── app/ # Next.js App Router folders, layout wrappers, and routes
-│ │ │ ├── pages/ # Page-level compositions (e.g., LobbyPage, SessionPage)
-│ │ │ ├── widgets/ # Major layout pieces (e.g., LiveChatRoom, CharacterHUD)
-│ │ │ ├── features/ # Interactive features (e.g., DiceRoller, SendMessageField)
-│ │ │ ├── entities/ # Business domain entities (e.g., CharacterModel, SessionModel)
-│ │ │ └── shared/ # Core UI kits, Zustand stores, and base HTTP/WS client instances
-│ ├── backend/ # NestJS server application
-│ │ ├── src/
-│ │ │ ├── auth/ # Custom NestJS guards & strategies to decode Supabase JWTs
-│ │ │ ├── user/ # User profile and D&D character sheet database management
-│ │ │ ├── game-session/ # Socket.io Gateway, active session room managers, and dice validation
-│ │ │ ├── ai/ # AI prompts, Gemini client, and structured JSON parser
-│ │ │ └── prisma/ # Database module initializing Prisma Client connections
+├── client/ # Next.js application (using FSD inside /src)
+│ ├── src/
+│ │ ├── app/ # Next.js App Router folders, layout wrappers, and routes
+│ │ ├── views/ # Page-level compositions (e.g., LobbyPage, SessionPage)
+│ │ ├── widgets/ # Major layout pieces (e.g., ChatWindow, CharacterHud)
+│ │ ├── features/ # Interactive features (e.g., DiceRoller, SendMessageField)
+│ │ ├── entities/ # Business domain entities (e.g., CharacterModel, SessionModel)
+│ │ └── shared/ # Core UI kits, Zustand stores, and base HTTP/WS client instances
+├── server/ # NestJS server application
+│ ├── src/
+│ │ ├── auth/ # Custom NestJS guards & strategies to decode Supabase JWTs
+│ │ ├── user/ # User profile and D&D character sheet database management
+│ │ ├── game-session/ # Socket.io Gateway, active session room managers, and dice validation
+│ │ ├── ai/ # AI prompts, Gemini client, and structured JSON parser
+│ │ └── prisma/ # Database module initializing Prisma Client connections
 ├── packages/
 │ ├── shared/ # Shared TypeScript models and Zod validation schemas
 │ │ ├── src/
@@ -67,4 +66,4 @@ Use Server Components by default, add 'use client' only when needed
 ## Commands (backend root)
 
 - `npm run start:dev` - Start development server
-- `npx prisma dev generate` - Generate Prisma Client
+- `npx prisma generate` - Generate Prisma Client

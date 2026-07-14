@@ -27,6 +27,7 @@ const draft: CharacterSheetInput = {
   inventory: [{ name: 'Battleaxe', qty: 2 }],
   aiProvider: null,
   aiModel: null,
+  persona: null,
 };
 
 describe('CharacterCreationForm', () => {

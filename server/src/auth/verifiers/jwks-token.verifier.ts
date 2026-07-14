@@ -15,10 +15,13 @@ export class JwksTokenVerifier implements TokenVerifier {
   private readonly issuer: string;
 
   constructor(supabaseUrl: string) {
+    // Trailing slashes in the env var would otherwise yield `//auth/v1`,
+    // breaking both the JWKS URL and the `iss` claim match.
+    const baseUrl = supabaseUrl.replace(/\/+$/, '');
     this.jwks = createRemoteJWKSet(
-      new URL(`${supabaseUrl}/auth/v1/.well-known/jwks.json`),
+      new URL(`${baseUrl}/auth/v1/.well-known/jwks.json`),
     );
-    this.issuer = `${supabaseUrl}/auth/v1`;
+    this.issuer = `${baseUrl}/auth/v1`;
   }
 
   async verify(token: string): Promise<AuthenticatedUser> {

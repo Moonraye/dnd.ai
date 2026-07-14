@@ -12,23 +12,23 @@ The hand-written code is unusually clean: no `TODO`/`FIXME`, no `any`, no `@ts-i
 
 ### Top priorities (remaining)
 
-1. **SEC-1** — No session membership model: anyone with a session UUID gets full access. _(A membership check now guards `JOIN_SESSION`; revisit whether REST endpoints taking a `sessionId` are equally covered.)_
-2. **PERF-1..3** — The slow page load: fully client-rendered SPA that renders a blank screen behind a serial auth → socket → join waterfall.
+1. **SEC-1** — Session membership is enforced on `JOIN_SESSION` but not yet on REST endpoints taking a `sessionId`.
+2. **PERF-1..2** — The slow page load: fully client-rendered SPA that renders a blank screen behind a serial auth → socket → join waterfall.
 
-_Resolved since last audit: **SEC-2** (helmet + global `@nestjs/throttler`, per-`/ai` `@Throttle`, `maxOutputTokens`, per-socket gateway limit, and the Phase-5 `AiTurnScheduler` closing the WS-triggered AI-turn cost surface) and **SEC-3** (shared Zod schemas bounded, including the AI-write `AiStateUpdateSchema`)._
+_Resolved since last audit: **SEC-2** (helmet + global `@nestjs/throttler`, per-`/ai` `@Throttle`, `maxOutputTokens`, per-socket gateway limit, and the Phase-5 `AiTurnScheduler` closing the WS-triggered AI-turn cost surface), **SEC-3** (shared Zod schemas bounded, including the AI-write `AiStateUpdateSchema`), **SEC-4** (fail-closed CORS for REST and WS), and **SEC-5** (`iss`/`aud` pinned in both JWT verifiers)._
 
 ---
 
 ## 🔐 Security
 
-### SEC-1 🔴 Any authenticated user can join any session
+### SEC-1 🔴 REST endpoints taking a `sessionId` lack a membership check
 
-**Where:** `server/src/game-session/game-session.gateway.ts:85-113` (`onJoinSession`)
+**Where:** REST controllers under `server/src/game-session/` and `server/src/user/`
 
-`JOIN_SESSION` fetches the session by id and calls `socket.join()` with **no membership, invitation, or ownership check**. The ack then returns the full session state, all character sheets, and up to 100 chat messages. There is no concept of "participant" in the data model at all — knowing (or brute-guessing via a leaked link) a session UUID grants read access, chat access, and dice-roll access to a stranger's game.
+_Partially resolved:_ a `SessionMember` relation now exists in Prisma (upserted on character creation) and a membership check guards `JOIN_SESSION`. What remains: REST endpoints that take a `sessionId` (character listing/creation, companion management) do not verify the caller is a member of that session, so a leaked/guessed session UUID still grants REST-level access.
 
-**Impact:** Unauthorized access to private game content; impersonation-adjacent chat in someone else's session.
-**Fix:** Add a `SessionMember` (or participant) relation in Prisma. On `JOIN_SESSION`, either verify membership or implement an explicit join/invite flow (invite code, creator approval, or open/closed lobby flag). Apply the same check to `listSessionSheets` and REST endpoints that take a `sessionId`.
+**Impact:** Unauthorized access to private game content via REST.
+**Fix:** Apply the same membership check used by `JOIN_SESSION` to every REST endpoint that takes a `sessionId`, or centralize it in a guard.
 
 ### SEC-2 ✅ RESOLVED — Rate limiting & LLM cost-abuse
 
@@ -38,26 +38,13 @@ Closed across several commits: `helmet` secures Express headers (`server/src/mai
 
 `packages/shared/src/validation.ts` is now bounded throughout: `InventoryItemSchema.name` (`.max(60)`), both `inventory` arrays (`.max(50)`), `aiProvider`/`aiModel` (`.max(100)`), `hpCurrent`/`hpMax` (`.max(9999)`), and the AI-write `AiStateUpdateSchema` (quest count/length, NPC map size + key/value lengths, summary length, and hp/inventory delta caps) — so validated AI output can no longer write megabyte JSON into `GameStateLog`/`CharacterSheet` or amplify it over the `STATE_LOG_UPDATED` broadcast.
 
-### SEC-4 🟠 CORS fail-open when `CLIENT_URL` is unset
+### SEC-4 ✅ RESOLVED — CORS fail-open when `CLIENT_URL` is unset
 
-**Where:** `server/src/main.ts:11` and `server/src/game-session/game-session.gateway.ts:46`
+Both halves now fail closed: `server/src/main.ts` throws at bootstrap in production when `CLIENT_URL` is unset, and the WS gateway (`game-session.gateway.ts`) resolves its CORS origin the same way instead of defaulting to allow-all.
 
-```ts
-app.enableCors({ origin: process.env.CLIENT_URL ?? true });
-```
+### SEC-5 ✅ RESOLVED — JWT verified without `issuer`/`audience` checks
 
-If `CLIENT_URL` is missing in a production environment, **any origin is reflected** for both REST and WebSocket. The code comments say "lock it down via CLIENT_URL in prod", i.e., safety depends on an env var nobody validates. Mitigated by Bearer-only auth (no cookies → no classic CSRF), but a malicious site could still use a token it obtained otherwise, and it invites misconfiguration.
-
-**Fix:** Fail closed: in production (`NODE_ENV === 'production'`), throw at bootstrap if `CLIENT_URL` is unset instead of defaulting to `true`.
-
-### SEC-5 🟠 JWT verified without `issuer`/`audience` checks
-
-**Where:** `server/src/auth/verifiers/hs256-token.verifier.ts:22-24`, `server/src/auth/verifiers/jwks-token.verifier.ts:23`
-
-`jwtVerify` is called with only `{ algorithms: ['HS256'] }` (or nothing but the JWKS). Any token validly signed by the configured key/project is accepted regardless of its `iss`/`aud` claims. For Supabase this should be pinned to your project issuer (`https://<ref>.supabase.co/auth/v1`) and `aud: 'authenticated'`.
-
-**Impact:** Token-confusion: any JWT the same key ever signs for another purpose would pass; weakens defense-in-depth.
-**Fix:** Pass `{ issuer, audience }` options to both `jwtVerify` calls.
+Both verifiers (`hs256-token.verifier.ts`, `jwks-token.verifier.ts`) now pin `issuer` to the project's `<SUPABASE_URL>/auth/v1` (trailing-slash normalized) and `audience: 'authenticated'`.
 
 ### SEC-6 🟠 Recovered sockets skip re-authentication for up to 2 minutes
 
@@ -75,7 +62,7 @@ A dropped socket resumes with its old `socket.data.user` without re-running the 
 
 **Where:** `server/src/ai/ai.service.ts:45`
 
-User text is concatenated directly after the schema instructions: `contents: \`${SCHEMA_INSTRUCTIONS}${prompt}\``. The blast radius is currently well-fenced — the output is `JSON.parse`d, re-validated against `CharacterSheetSchema`, `aiProvider`/`aiModel`are force-nulled, and nothing is persisted — so this is informational today. It becomes real in Phase 5 when model output starts mutating`GameStateLog`.
+User text is concatenated directly after the schema instructions: `contents: \`${SCHEMA_INSTRUCTIONS}${prompt}\``. The blast radius is currently well-fenced — the output is `JSON.parse`d, re-validated against `CharacterSheetSchema`, `aiProvider`/`aiModel` are force-nulled, and nothing is persisted — so this is informational today. It becomes real in Phase 5 when model output starts mutating `GameStateLog`.
 
 Also: on parse failures the **full raw model output is logged** (`ai.service.ts:63,79`) — user-influenced content in logs; keep, but truncate.
 
@@ -241,12 +228,10 @@ Existing tests are decent (8 server specs, 8 client tests), but the riskiest pat
 
 ## ✅ Recommended fix order
 
-1. **Commit the uncommitted Phase-4 work** (KLUDGE-6) — everything else builds on a safe baseline.
-2. **BUG-1** (oldest-100 messages) — one-line query fix, user-visible correctness.
-3. **SEC-3** (Zod `.max()` bounds) — trivial diffs, closes the DoS surface before Phase 5.
-4. **PERF-1 fix #1 + #2** (skeleton instead of `null`; reuse cached token in socket auth) — biggest perceived-speed win for the least code. Then re-measure with a prod build (PERF-0).
-5. **SEC-2** (`@nestjs/throttler` + AI endpoint cap + `maxOutputTokens`) — must land before Phase 5 makes LLM calls routine.
-6. **SEC-1** (session membership model) — needs a schema migration; design it alongside Phase 5 since AI participants will need a membership concept anyway.
-7. **BUG-2** (`@@unique` constraint) + **SEC-4** (fail-closed CORS) + **SEC-5** (iss/aud) + **BUG-3** (log caught errors) — small hardening batch.
-8. **PERF-3/4** (store append + memoized rows + scroll behavior) — before sessions get long.
-9. **KLUDGE-1/2** (ignore generated Prisma, root workspace) — alongside Phase 6 CI setup.
+_(Resolved items removed — SEC-2/3/4/5, BUG-1, PERF-1 quick wins, and the workspace setup have landed; see git history.)_
+
+1. **SEC-1** (membership check on REST endpoints taking a `sessionId`) — closes the remaining unauthorized-access surface.
+2. **PERF-1 fix #3 / PERF-2** (server-render the session shell; move initial data to RSC) — the structural half of the slow first paint.
+3. **BUG-2** (`@@unique([userId, sessionId])` constraint) — the service now checks caps inside a Serializable transaction; a DB constraint remains the strongest backstop.
+4. **BUG-3** (log caught errors in the gateway) — small hardening batch.
+5. **KLUDGE-3** (Redis adapter or documented single-instance constraint) — alongside Phase 6 CI/deploy setup.

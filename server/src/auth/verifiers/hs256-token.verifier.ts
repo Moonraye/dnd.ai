@@ -17,7 +17,9 @@ export class Hs256TokenVerifier implements TokenVerifier {
 
   constructor(jwtSecret: string, supabaseUrl: string) {
     this.secret = new TextEncoder().encode(jwtSecret);
-    this.issuer = `${supabaseUrl}/auth/v1`;
+    // Trailing slashes in the env var would otherwise yield `//auth/v1`,
+    // which never matches the token's `iss` claim.
+    this.issuer = `${supabaseUrl.replace(/\/+$/, '')}/auth/v1`;
   }
 
   async verify(token: string): Promise<AuthenticatedUser> {

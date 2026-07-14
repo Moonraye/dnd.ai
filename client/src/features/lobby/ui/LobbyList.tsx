@@ -1,53 +1,54 @@
 'use client';
 
-import Link from 'next/link';
+import { Button } from '@/shared/ui';
 import { useLobbyList } from '../model/useLobbyList';
+import { CampaignCard } from './CampaignCard';
 
 export function LobbyList() {
   const { lobbies, isLoading, error, refresh } = useLobbyList();
 
   if (isLoading) {
-    return <p className="text-sm text-zinc-500">Loading lobbies…</p>;
+    return (
+      <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {[0, 1, 2].map((i) => (
+          <div
+            key={i}
+            className="h-28 animate-pulse rounded-lg border border-border bg-bg-subtle"
+          />
+        ))}
+      </div>
+    );
   }
 
   if (error) {
     return (
-      <div className="flex flex-col items-center gap-2">
-        <p role="alert" className="text-sm text-red-600">
+      <div className="flex flex-col items-start gap-3 rounded-lg border border-danger/30 bg-danger/5 p-6">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
-        <button
-          type="button"
-          onClick={() => void refresh()}
-          className="text-sm underline"
-        >
+        <Button variant="secondary" size="sm" onClick={() => void refresh()}>
           Try again
-        </button>
+        </Button>
       </div>
     );
   }
 
   if (lobbies.length === 0) {
     return (
-      <p className="text-sm text-zinc-500">
-        No open lobbies yet — create the first one!
-      </p>
+      <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-border py-16 text-center">
+        <p className="font-display text-lg text-fg">No campaigns yet</p>
+        <p className="max-w-sm text-sm text-fg-muted">
+          Start the first table and the dungeon master will meet you there.
+        </p>
+      </div>
     );
   }
 
   return (
-    <ul className="flex w-full max-w-sm flex-col gap-2">
+    <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {lobbies.map((lobby) => (
-        <li key={lobby.id}>
-          <Link
-            href={`/session/${lobby.id}`}
-            className="flex items-center justify-between rounded-md border border-zinc-300 px-4 py-3 hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
-          >
-            <span className="font-medium">{lobby.title}</span>
-            <span className="text-sm text-zinc-500">Join →</span>
-          </Link>
-        </li>
+        <CampaignCard key={lobby.id} lobby={lobby} />
       ))}
-    </ul>
+    </div>
   );
 }

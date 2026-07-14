@@ -15,7 +15,7 @@
     "dev:server": "npm run start:dev -w server",
     "build:client": "npm run build -w client",
     "build:server": "npm run build -w server",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w packages/shared && npm run build --workspaces --if-present",
     "test:client": "npm run test -w client",
     "test:server": "npm run test -w server",
     "test": "npm run test --workspaces --if-present"

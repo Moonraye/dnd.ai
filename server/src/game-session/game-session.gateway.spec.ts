@@ -12,6 +12,7 @@ import { GameSessionGateway } from './game-session.gateway';
 import type { GameSessionService } from './game-session.service';
 import type { AiOrchestrationService } from '../ai/ai-orchestration.service';
 import type { AiTurnScheduler } from '../ai/ai-turn-scheduler.service';
+import type { PrismaService } from '../prisma/prisma.service';
 
 describe('GameSessionGateway', () => {
   const verify = jest.fn();
@@ -29,6 +30,21 @@ describe('GameSessionGateway', () => {
   const isMember = jest.fn();
   const getStateLog = jest.fn();
   const requestEvaluation = jest.fn();
+  const registerSilenceCallback = jest.fn();
+  const resetSilenceTimer = jest.fn();
+  const canInitiateUnprompted = jest.fn();
+  const recordUnpromptedCall = jest.fn();
+
+  const prismaFindUniqueChatMessage = jest.fn();
+  const prismaFindUniqueCharacterSheet = jest.fn();
+  const prismaFindFirstCharacterSheet = jest.fn();
+  const mockPrisma = {
+    chatMessage: { findUnique: prismaFindUniqueChatMessage },
+    characterSheet: {
+      findUnique: prismaFindUniqueCharacterSheet,
+      findFirst: prismaFindFirstCharacterSheet,
+    },
+  } as unknown as PrismaService;
 
   const sheet: CharacterSheetPayload = {
     id: 'sheet-uuid',
@@ -73,6 +89,24 @@ describe('GameSessionGateway', () => {
     listSessionSheets.mockResolvedValue([]);
     isMember.mockResolvedValue(true);
     getStateLog.mockResolvedValue(null);
+    prismaFindUniqueChatMessage.mockResolvedValue({
+      id: 'message-uuid',
+      sessionId: summary.id,
+      senderType: 'HUMAN',
+      senderName: user.email,
+      messageText: 'Hello party!',
+      metadata: null,
+      visibility: 'PUBLIC',
+      senderUserId: null,
+      senderCharacterId: null,
+      recipientUserId: null,
+      recipientCharacterId: null,
+      recipientName: null,
+      createdAt: new Date('2026-07-10T12:05:00.000Z'),
+    });
+    prismaFindUniqueCharacterSheet.mockResolvedValue(null);
+    prismaFindFirstCharacterSheet.mockResolvedValue(null);
+
     gateway = new GameSessionGateway(
       { verify },
       { ensureUser } as unknown as UserProvisioningService,
@@ -91,7 +125,14 @@ describe('GameSessionGateway', () => {
       } as unknown as CharacterSheetService,
       { roll } as unknown as DiceService,
       { evaluateTurns: jest.fn() } as unknown as AiOrchestrationService,
-      { requestEvaluation } as unknown as AiTurnScheduler,
+      {
+        requestEvaluation,
+        registerSilenceCallback,
+        resetSilenceTimer,
+        canInitiateUnprompted,
+        recordUnpromptedCall,
+      } as unknown as AiTurnScheduler,
+      mockPrisma,
     );
     gateway.server = { to } as unknown as Server;
   });
@@ -234,6 +275,7 @@ describe('GameSessionGateway', () => {
         summary.id,
         user.email,
         payload.messageText,
+        expect.any(Object),
       );
       expect(to).toHaveBeenCalledWith(room);
       expect(emit).toHaveBeenCalledWith(WS_EVENTS.CHAT_MESSAGE, message);

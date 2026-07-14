@@ -22,6 +22,7 @@ const validInput: CharacterSheetInput = {
   inventory: [],
   aiProvider: null,
   aiModel: null,
+  persona: null,
 };
 
 describe('useCreateCharacter', () => {
@@ -44,7 +45,13 @@ describe('useCreateCharacter', () => {
   });
 
   it('creates the sheet and seeds it into the store', async () => {
-    const created = { ...validInput, id: 'sheet-uuid', userId: 'user-uuid', sessionId: SESSION_ID };
+    const created = {
+      ...validInput,
+      id: 'sheet-uuid',
+      userId: 'user-uuid',
+      ownerId: null,
+      sessionId: SESSION_ID,
+    };
     createCharacterMock.mockResolvedValue(created);
     const { result } = renderHook(() => useCreateCharacter(SESSION_ID));
 

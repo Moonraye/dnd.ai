@@ -99,6 +99,12 @@ describe('GameSessionService', () => {
         senderType: 'HUMAN',
         senderName: 'player@example.com',
         messageText: 'Roll for initiative!',
+        visibility: 'PUBLIC',
+        senderUserId: null,
+        senderCharacterId: null,
+        recipientUserId: null,
+        recipientCharacterId: null,
+        recipientName: null,
       },
     });
     expect(result.createdAt).toBe('2026-07-10T12:05:00.000Z');

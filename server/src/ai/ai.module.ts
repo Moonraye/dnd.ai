@@ -6,6 +6,7 @@ import { AiService } from './ai.service';
 import { AiOrchestrationService } from './ai-orchestration.service';
 import { AiTurnScheduler } from './ai-turn-scheduler.service';
 import { genAiProvider } from './genai.provider';
+import { DiceService } from '../game-session/dice.service';
 
 // UserModule is imported alongside AuthModule because SupabaseAuthGuard
 // depends on UserProvisioningService, which AuthModule does not re-export
@@ -18,6 +19,7 @@ import { genAiProvider } from './genai.provider';
     AiOrchestrationService,
     AiTurnScheduler,
     genAiProvider,
+    DiceService,
   ],
   exports: [AiOrchestrationService, AiTurnScheduler],
 })

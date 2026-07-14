@@ -20,12 +20,16 @@ export function isTransientGeminiError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
   const err = error as {
     status?: number;
+    name?: string;
     message?: string;
     cause?: { code?: string };
   };
   if (typeof err.status === 'number' && TRANSIENT_STATUS.has(err.status)) {
     return true;
   }
+  // httpOptions.timeout aborts a stalled request; a retry may well succeed.
+  // (No caller passes a user-driven abortSignal, so aborts are always ours.)
+  if (err.name === 'AbortError' || err.name === 'TimeoutError') return true;
   const code = err.cause?.code;
   if (typeof code === 'string' && TRANSIENT_NET_CODES.has(code)) return true;
   // undici collapses most connection failures to this bare message.

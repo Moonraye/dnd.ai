@@ -1,0 +1,12 @@
+reviews:
+  path_filters:
+    - "!**/package-lock.json"
+    - "!**/yarn.lock"
+    - "!**/pnpm-lock.yaml"
+    - "!**/dist/**"
+    - "!**/*.min.js"
+    - "!**/*.min.css"
+    - "!**/*.d.ts"
+    - "!**/node_modules/**"
+    - ".agents"
+    - ".claude"

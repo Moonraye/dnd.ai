@@ -9,12 +9,14 @@ import { createJSONStorage, persist } from 'zustand/middleware';
 
 export type JoinStatus = 'idle' | 'connecting' | 'joined' | 'error';
 
+export type ClientCharacterSheetPayload = CharacterSheetPayload & { thinking?: boolean };
+
 interface SessionState {
   sessionId: string | null;
   session: SessionSummary | null;
   messages: ChatMessagePayload[];
   /** Party sheets in the room, feeding the HUD and party strip. */
-  characters: CharacterSheetPayload[];
+  characters: ClientCharacterSheetPayload[];
   /** AI campaign memory, feeding the Campaign Journal. */
   stateLog: GameStateLogPayload | null;
   /** ISO timestamp of the newest received message (ADR 6 catch-up cursor). */
@@ -26,23 +28,27 @@ interface SessionState {
   setSessionInfo: (session: SessionSummary) => void;
   setJoinStatus: (status: JoinStatus, error?: string) => void;
   addMessages: (incoming: ChatMessagePayload[]) => void;
-  setCharacters: (characters: CharacterSheetPayload[]) => void;
-  upsertCharacter: (character: CharacterSheetPayload) => void;
+  setCharacters: (characters: ClientCharacterSheetPayload[]) => void;
+  upsertCharacter: (character: ClientCharacterSheetPayload) => void;
+  removeCharacter: (characterId: string) => void;
+  setCharacterThinking: (characterId: string, thinking: boolean) => void;
   setStateLog: (stateLog: GameStateLogPayload | null) => void;
   reset: () => void;
 }
 
-const initialState = {
+// Factory (not a shared constant) so every reset gets its own Set instance —
+// a module-level Set would be silently corrupted by any in-place mutation.
+const createInitialState = () => ({
   sessionId: null,
   session: null,
-  messages: [],
-  characters: [] as CharacterSheetPayload[],
+  messages: [] as ChatMessagePayload[],
+  characters: [] as ClientCharacterSheetPayload[],
   stateLog: null as GameStateLogPayload | null,
   lastMessageAt: null,
   joinStatus: 'idle' as JoinStatus,
   joinError: null,
   knownMessageIds: new Set<string>(),
-};
+});
 
 /**
  * ADR 6: active-session state, persisted to sessionStorage so a page reload
@@ -51,13 +57,13 @@ const initialState = {
 export const useSessionStore = create<SessionState>()(
   persist(
     (set) => ({
-      ...initialState,
+      ...createInitialState(),
 
       setActiveSession: (sessionId) =>
         set((state) =>
           state.sessionId === sessionId
             ? { sessionId }
-            : { ...initialState, sessionId, knownMessageIds: new Set<string>() },
+            : { ...createInitialState(), sessionId },
         ),
 
       setSessionInfo: (session) => set({ session }),
@@ -99,13 +105,28 @@ export const useSessionStore = create<SessionState>()(
             return { characters: [...state.characters, character] };
           }
           const characters = [...state.characters];
-          characters[index] = character;
+          characters[index] = {
+            ...character,
+            thinking: character.thinking !== undefined ? character.thinking : state.characters[index].thinking,
+          };
           return { characters };
         }),
 
+      removeCharacter: (characterId) =>
+        set((state) => ({
+          characters: state.characters.filter((c) => c.id !== characterId),
+        })),
+
+      setCharacterThinking: (characterId, thinking) =>
+        set((state) => ({
+          characters: state.characters.map((c) =>
+            c.id === characterId ? { ...c, thinking } : c,
+          ),
+        })),
+
       setStateLog: (stateLog) => set({ stateLog }),
 
-      reset: () => set(initialState),
+      reset: () => set(createInitialState()),
     }),
     {
       name: 'dnd-session',

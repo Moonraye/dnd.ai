@@ -1,3 +1,5 @@
+import { Input } from '@/shared/ui';
+
 interface AuthFieldProps {
   label: string;
   name: string;
@@ -14,16 +16,16 @@ export function AuthField({
   error,
 }: AuthFieldProps) {
   return (
-    <label className="flex flex-col gap-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <input
+    <label className="flex flex-col gap-1.5 text-sm">
+      <span className="font-medium text-fg">{label}</span>
+      <Input
         name={name}
         type={type}
         autoComplete={autoComplete}
         aria-invalid={Boolean(error)}
-        className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-900 outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+        className="aria-invalid:border-danger"
       />
-      {error ? <span className="text-red-600">{error}</span> : null}
+      {error ? <span className="text-sm text-danger">{error}</span> : null}
     </label>
   );
 }

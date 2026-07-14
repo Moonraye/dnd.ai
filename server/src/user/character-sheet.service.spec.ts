@@ -18,6 +18,8 @@ describe('CharacterSheetService', () => {
   const sheetFindFirst = jest.fn();
   const sheetFindMany = jest.fn();
   const sheetUpdate = jest.fn();
+  const sheetFindUnique = jest.fn();
+  const sheetDelete = jest.fn();
   const sessionMemberUpsert = jest.fn();
   const transaction = jest.fn((callback) => callback(prisma));
   const prisma = {
@@ -30,6 +32,8 @@ describe('CharacterSheetService', () => {
       findFirst: sheetFindFirst,
       findMany: sheetFindMany,
       update: sheetUpdate,
+      findUnique: sheetFindUnique,
+      delete: sheetDelete,
     },
   } as unknown as PrismaService;
   const service = new CharacterSheetService(prisma);
@@ -110,6 +114,7 @@ describe('CharacterSheetService', () => {
     expect(sheetCreate).toHaveBeenCalledWith({
       data: {
         userId: null,
+        ownerId: 'user-uuid',
         sessionId: 'session-uuid',
         name: 'Thorin',
         hpCurrent: 12,
@@ -118,6 +123,7 @@ describe('CharacterSheetService', () => {
         inventory: validInput.inventory,
         aiProvider: 'google',
         aiModel: 'gemini-flash-latest',
+        persona: undefined,
       },
     });
     expect(sessionMemberUpsert).not.toHaveBeenCalled();
@@ -244,5 +250,122 @@ describe('CharacterSheetService', () => {
     await expect(
       service.getOwnSheet('user-uuid', 'session-uuid'),
     ).resolves.toBeNull();
+  });
+
+  describe('companion management', () => {
+    const companionSheet = {
+      id: 'companion-uuid',
+      userId: null,
+      ownerId: 'owner-uuid',
+      sessionId: 'session-uuid',
+      name: 'Gimli',
+      hpCurrent: 30,
+      hpMax: 30,
+      stats: { str: 12, dex: 12, con: 12, int: 12, wis: 12, cha: 12 },
+      inventory: [],
+      aiProvider: 'google',
+      aiModel: 'gemini-flash-latest',
+      persona: 'A grumpy dwarf',
+    } as unknown as CharacterSheet;
+
+    const campaignSession = {
+      id: 'session-uuid',
+      creatorId: 'host-uuid',
+    } as CampaignSession;
+
+    it('allows the owner to update a companion', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+      sheetFindMany.mockResolvedValue([companionSheet]);
+      sheetUpdate.mockResolvedValue({ ...companionSheet, name: 'Gimli Modified' });
+
+      const result = await service.updateCompanionSheet('owner-uuid', 'session-uuid', 'companion-uuid', {
+        name: 'Gimli Modified',
+      });
+
+      expect(sheetUpdate).toHaveBeenCalled();
+      expect(result.name).toBe('Gimli Modified');
+    });
+
+    it('allows the host to update a companion', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+      sheetFindMany.mockResolvedValue([companionSheet]);
+      sheetUpdate.mockResolvedValue({ ...companionSheet, persona: 'Nicier dwarf' });
+
+      const result = await service.updateCompanionSheet('host-uuid', 'session-uuid', 'companion-uuid', {
+        persona: 'Nicier dwarf',
+      });
+
+      expect(sheetUpdate).toHaveBeenCalled();
+      expect(result.persona).toBe('Nicier dwarf');
+    });
+
+    it('denies other users from updating a companion', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+
+      await expect(
+        service.updateCompanionSheet('other-uuid', 'session-uuid', 'companion-uuid', {
+          name: 'Gimli Forbidden',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('denies changing a companion into a second DM', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+      sheetFindMany.mockResolvedValue([
+        companionSheet,
+        { id: 'dm-uuid', name: 'Dungeon Master', aiProvider: 'google' },
+      ]);
+
+      await expect(
+        service.updateCompanionSheet('owner-uuid', 'session-uuid', 'companion-uuid', {
+          name: 'Dungeon Master (AI)',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('allows the owner to delete a companion', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+      sheetDelete.mockResolvedValue(companionSheet);
+
+      const result = await service.deleteCompanionSheet('owner-uuid', 'session-uuid', 'companion-uuid');
+
+      expect(sheetDelete).toHaveBeenCalledWith({ where: { id: 'companion-uuid' } });
+      expect(result.id).toBe('companion-uuid');
+    });
+
+    it('allows the host to delete a companion', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+      sheetDelete.mockResolvedValue(companionSheet);
+
+      const result = await service.deleteCompanionSheet('host-uuid', 'session-uuid', 'companion-uuid');
+
+      expect(sheetDelete).toHaveBeenCalled();
+      expect(result.id).toBe('companion-uuid');
+    });
+
+    it('denies other users from deleting a companion', async () => {
+      sheetFindUnique.mockResolvedValue(companionSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+
+      await expect(
+        service.deleteCompanionSheet('other-uuid', 'session-uuid', 'companion-uuid'),
+      ).rejects.toThrow();
+    });
+
+    it('denies deleting human characters', async () => {
+      const humanSheet = { ...companionSheet, userId: 'some-user-uuid' };
+      sheetFindUnique.mockResolvedValue(humanSheet);
+      sessionFindUnique.mockResolvedValue(campaignSession);
+
+      await expect(
+        service.deleteCompanionSheet('host-uuid', 'session-uuid', 'companion-uuid'),
+      ).rejects.toThrow();
+    });
   });
 });

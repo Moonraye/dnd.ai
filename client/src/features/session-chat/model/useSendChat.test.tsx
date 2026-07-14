@@ -48,6 +48,25 @@ describe('useSendChat', () => {
     expect(result.current.error).toBeNull();
   });
 
+  it('emits chat:send with command and targetId properties', async () => {
+    emitWithAck.mockResolvedValue({ success: true, data: {} });
+    const { result } = renderHook(() => useSendChat(SESSION_ID));
+
+    let ok = false;
+    await act(async () => {
+      ok = await result.current.send('Hello Legolas!', 'WHISPER', '3b241101-e2bb-4255-8caf-4136c566a962');
+    });
+
+    expect(ok).toBe(true);
+    expect(emitWithAck).toHaveBeenCalledWith('chat:send', {
+      sessionId: SESSION_ID,
+      messageText: 'Hello Legolas!',
+      command: 'WHISPER',
+      targetId: '3b241101-e2bb-4255-8caf-4136c566a962',
+    });
+    expect(result.current.error).toBeNull();
+  });
+
   it('surfaces server-side ack errors', async () => {
     emitWithAck.mockResolvedValue({
       success: false,
