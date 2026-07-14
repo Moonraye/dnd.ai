@@ -7,6 +7,10 @@ import type {
   InventoryItemSchema,
   CharacterSheetSchema,
   SendChatMessageSchema,
+  UpdateCharacterSheetSchema,
+  GenerateCharacterDraftSchema,
+  AiStateUpdateSchema,
+  AiResponseSchema,
 } from './validation';
 
 export type SessionStatus = z.infer<typeof SessionStatusSchema>;
@@ -16,3 +20,11 @@ export type AbilityScores = z.infer<typeof AbilityScoresSchema>;
 export type InventoryItem = z.infer<typeof InventoryItemSchema>;
 export type CharacterSheetInput = z.infer<typeof CharacterSheetSchema>;
 export type SendChatMessageInput = z.infer<typeof SendChatMessageSchema>;
+export type UpdateCharacterSheetInput = z.infer<
+  typeof UpdateCharacterSheetSchema
+>;
+export type GenerateCharacterDraftInput = z.infer<
+  typeof GenerateCharacterDraftSchema
+>;
+export type AiStateUpdate = z.infer<typeof AiStateUpdateSchema>;
+export type AiResponse = z.infer<typeof AiResponseSchema>;

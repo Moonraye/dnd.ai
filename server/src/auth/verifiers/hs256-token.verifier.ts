@@ -13,14 +13,18 @@ import { toAuthenticatedUser } from './jwks-token.verifier';
 @Injectable()
 export class Hs256TokenVerifier implements TokenVerifier {
   private readonly secret: Uint8Array;
+  private readonly issuer: string;
 
-  constructor(jwtSecret: string) {
+  constructor(jwtSecret: string, supabaseUrl: string) {
     this.secret = new TextEncoder().encode(jwtSecret);
+    this.issuer = `${supabaseUrl}/auth/v1`;
   }
 
   async verify(token: string): Promise<AuthenticatedUser> {
     const { payload } = await jwtVerify(token, this.secret, {
       algorithms: ['HS256'],
+      issuer: this.issuer,
+      audience: 'authenticated',
     });
     return toAuthenticatedUser(payload);
   }

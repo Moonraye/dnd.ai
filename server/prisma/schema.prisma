@@ -18,6 +18,7 @@ model User {
 
   campaignSessions CampaignSession[]
   characterSheets  CharacterSheet[]
+  sessionMembers   SessionMember[]
 }
 
 enum SessionStatus {
@@ -30,6 +31,7 @@ enum SenderType {
   HUMAN
   AI_DM
   AI_PLAYER
+  SYSTEM
 }
 
 model CampaignSession {
@@ -43,14 +45,15 @@ model CampaignSession {
   characterSheets CharacterSheet[]
   chatMessages    ChatMessage[]
   gameStateLog    GameStateLog?
+  sessionMembers  SessionMember[]
 
   @@index([creatorId])
 }
 
 model CharacterSheet {
   id         String          @id @default(uuid()) @db.Uuid
-  userId     String          @db.Uuid
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String?         @db.Uuid
+  user       User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessionId  String          @db.Uuid
   session    CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   name       String
@@ -61,6 +64,7 @@ model CharacterSheet {
   aiProvider String? // ADR 4: e.g. "google"; null = human-controlled
   aiModel    String? // ADR 4: e.g. "gemini-2.5-flash"
 
+  @@unique([userId, sessionId])
   @@index([sessionId])
   @@index([userId])
 }
@@ -72,6 +76,8 @@ model ChatMessage {
   senderType  SenderType
   senderName  String
   messageText String
+  // Structured dice-roll payload on SYSTEM messages; null for plain chat.
+  metadata    Json?
   createdAt   DateTime        @default(now())
 
   @@index([sessionId, createdAt])
@@ -85,5 +91,19 @@ model GameStateLog {
   activeQuests     Json            @default("[]")
   npcRelationships Json            @default("{}")
   campaignSummary  Json            @default("{}")
+  // Append-only ledger of immutable canon (names, deaths, promises, places).
+  keyFacts         Json            @default("[]")
   updatedAt        DateTime        @updatedAt
+}
+
+model SessionMember {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @db.Uuid
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String          @db.Uuid
+  session   CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@unique([userId, sessionId])
+  @@index([sessionId])
 }

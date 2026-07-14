@@ -1,0 +1,151 @@
+import { Injectable, NotFoundException } from '@nestjs/common';
+import type {
+  ChatMessagePayload,
+  DiceRollMetadata,
+  GameStateLogPayload,
+  SessionSummary,
+} from '@dnd/shared';
+import type {
+  CampaignSession,
+  ChatMessage,
+  Prisma,
+} from '../generated/prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
+import { toStateLogPayload } from '../ai/game-state-log.mapper';
+import type { CreateLobbyDto } from './dto/create-lobby.dto';
+
+const RECENT_MESSAGES_LIMIT = 100;
+
+@Injectable()
+export class GameSessionService {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async createLobby(
+    creatorId: string,
+    dto: CreateLobbyDto,
+  ): Promise<SessionSummary> {
+    const session = await this.prisma.campaignSession.create({
+      data: {
+        title: dto.title,
+        creatorId,
+        sessionMembers: {
+          create: { userId: creatorId },
+        },
+      },
+    });
+    return this.toSessionSummary(session);
+  }
+
+  async isMember(sessionId: string, userId: string): Promise<boolean> {
+    const member = await this.prisma.sessionMember.findUnique({
+      where: {
+        userId_sessionId: { userId, sessionId },
+      },
+    });
+    return !!member;
+  }
+
+  async listLobbies(): Promise<SessionSummary[]> {
+    const sessions = await this.prisma.campaignSession.findMany({
+      where: { status: 'LOBBY' },
+      orderBy: { createdAt: 'desc' },
+    });
+    return sessions.map((session) => this.toSessionSummary(session));
+  }
+
+  async getSession(id: string): Promise<SessionSummary> {
+    const session = await this.prisma.campaignSession.findUnique({
+      where: { id },
+    });
+    if (!session) {
+      throw new NotFoundException(`Session ${id} not found`);
+    }
+    return this.toSessionSummary(session);
+  }
+
+  async addChatMessage(
+    sessionId: string,
+    senderName: string,
+    messageText: string,
+  ): Promise<ChatMessagePayload> {
+    const message = await this.prisma.chatMessage.create({
+      data: { sessionId, senderType: 'HUMAN', senderName, messageText },
+    });
+    return this.toChatPayload(message);
+  }
+
+  /**
+   * Persist a server-generated SYSTEM message (e.g. a dice roll). The dice
+   * card rides the same chat feed, so ADR 6 catch-up/recovery is unchanged.
+   */
+  async addSystemMessage(
+    sessionId: string,
+    senderName: string,
+    messageText: string,
+    metadata: DiceRollMetadata,
+  ): Promise<ChatMessagePayload> {
+    const message = await this.prisma.chatMessage.create({
+      data: {
+        sessionId,
+        senderType: 'SYSTEM',
+        senderName,
+        messageText,
+        metadata: metadata as unknown as Prisma.InputJsonValue,
+      },
+    });
+    return this.toChatPayload(message);
+  }
+
+  /**
+   * ADR 6: on (re)join, return only messages the client is missing.
+   * Uses the `[sessionId, createdAt]` index.
+   */
+  async getMessagesSince(
+    sessionId: string,
+    since?: string,
+  ): Promise<ChatMessagePayload[]> {
+    const messages = await this.prisma.chatMessage.findMany({
+      where: {
+        sessionId,
+        ...(since ? { createdAt: { gt: new Date(since) } } : {}),
+      },
+      orderBy: { createdAt: since ? 'asc' : 'desc' },
+      take: RECENT_MESSAGES_LIMIT,
+    });
+    const payloads = messages.map((message) => this.toChatPayload(message));
+    return since ? payloads : payloads.reverse();
+  }
+
+  /**
+   * The AI-maintained campaign memory for a session, or null if the AI has not
+   * written any state yet. Hydrates the Campaign Journal on join.
+   */
+  async getStateLog(sessionId: string): Promise<GameStateLogPayload | null> {
+    const log = await this.prisma.gameStateLog.findUnique({
+      where: { sessionId },
+    });
+    return log ? toStateLogPayload(log) : null;
+  }
+
+  private toSessionSummary(session: CampaignSession): SessionSummary {
+    return {
+      id: session.id,
+      title: session.title,
+      creatorId: session.creatorId,
+      status: session.status,
+      createdAt: session.createdAt.toISOString(),
+    };
+  }
+
+  private toChatPayload(message: ChatMessage): ChatMessagePayload {
+    return {
+      id: message.id,
+      sessionId: message.sessionId,
+      senderType: message.senderType,
+      senderName: message.senderName,
+      messageText: message.messageText,
+      metadata: (message.metadata as DiceRollMetadata | null) ?? null,
+      createdAt: message.createdAt.toISOString(),
+    };
+  }
+}

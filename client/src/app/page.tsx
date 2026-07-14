@@ -17,6 +17,9 @@ export default function Home() {
         >
           Start your adventure
         </Link>
+        <Link href="/lobby" className="text-sm underline">
+          Browse open lobbies
+        </Link>
       </main>
     </>
   );
