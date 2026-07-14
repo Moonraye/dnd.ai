@@ -17,7 +17,9 @@ export function isDungeonMasterSheet(sheet: {
 }): boolean {
   if (sheet.aiProvider === null) return false;
   const name = sheet.name.toLowerCase();
-  return name.includes('dungeon master') || name.includes('dm');
+  // Word-bounded so free-text companion names like "Edmund" or "Handmaiden"
+  // (which contain "dm") are never counted as the Dungeon Master.
+  return /\bdungeon master\b/.test(name) || /\bdm\b/.test(name);
 }
 
 /** Count DMs and players (non-DM sheets) among a session's character sheets. */
@@ -30,3 +32,11 @@ export function countSessionRoles(
   }
   return { dms, players: sheets.length - dms };
 }
+
+/**
+ * Phase C: Interactivity Limits
+ */
+export const BANTER_MAX_HOPS = 1;
+export const INITIATE_SILENCE_MS = 180_000; // 3 minutes
+export const MAX_UNPROMPTED_CALLS_PER_HOUR = 10;
+export const COOLDOWN_MS = 15_000;

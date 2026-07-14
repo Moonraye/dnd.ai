@@ -6,6 +6,7 @@ import type {
   InventoryItem,
 } from '@dnd/shared';
 import { useState, type FormEvent } from 'react';
+import { Button, Input, Panel, Textarea } from '@/shared/ui';
 import { useCharacterDraft } from '../model/useCharacterDraft';
 import { useCreateCharacter } from '../model/useCreateCharacter';
 import {
@@ -27,18 +28,11 @@ const DEFAULT_STATS: AbilityScores = {
   cha: 10,
 };
 
-const inputClass =
-  'rounded-md border border-zinc-300 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900';
-
 export function CharacterCreationForm({
   sessionId,
 }: CharacterCreationFormProps) {
   const { submit, isSubmitting, error } = useCreateCharacter(sessionId);
-  const {
-    generate,
-    isGenerating,
-    error: draftError,
-  } = useCharacterDraft();
+  const { generate, isGenerating, error: draftError } = useCharacterDraft();
 
   const [name, setName] = useState('');
   const [hpMax, setHpMax] = useState('10');
@@ -66,10 +60,10 @@ export function CharacterCreationForm({
       hpMax: max,
       hpCurrent: max,
       stats,
-      // Drop blank rows so they don't trip the shared schema.
       inventory: inventory.filter((item) => item.name.trim().length > 0),
       aiProvider: null,
       aiModel: null,
+      persona: null,
     };
     await submit(input);
   };
@@ -77,78 +71,77 @@ export function CharacterCreationForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="mx-auto flex w-full max-w-xl flex-col gap-6"
+      className="flex w-full flex-col gap-6"
       noValidate
     >
-      <div className="flex flex-col gap-2 rounded-md border border-zinc-300 p-4 dark:border-zinc-700">
-        <span className="text-sm font-medium">Generate with AI (optional)</span>
-        <textarea
+      <Panel className="flex flex-col gap-2 bg-bg-subtle">
+        <span className="text-sm font-medium text-fg">
+          Generate with AI (optional)
+        </span>
+        <Textarea
           value={concept}
           onChange={(event) => setConcept(event.target.value)}
           placeholder="A grizzled dwarf cleric who lost their faith…"
           rows={2}
-          className={inputClass}
         />
         <div className="flex items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={handleGenerate}
             disabled={isGenerating || concept.trim().length === 0}
-            className="rounded-md border border-zinc-400 px-3 py-1.5 text-sm font-medium disabled:opacity-50 dark:border-zinc-600"
           >
             {isGenerating ? 'Generating…' : 'Generate draft'}
-          </button>
-          <span className="text-xs text-zinc-500">
+          </Button>
+          <span className="text-xs text-fg-subtle">
             A draft — review and edit before saving.
           </span>
         </div>
         {draftError ? (
-          <p role="alert" className="text-sm text-red-600">
+          <p role="alert" className="text-sm text-danger">
             {draftError}
           </p>
         ) : null}
-      </div>
+      </Panel>
 
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="font-medium">Name</span>
-        <input
+      <label className="flex flex-col gap-1.5 text-sm">
+        <span className="font-medium text-fg">Name</span>
+        <Input
           name="name"
           type="text"
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Thorin Oakenshield"
-          className={inputClass}
         />
       </label>
 
-      <label className="flex w-32 flex-col gap-1 text-sm">
-        <span className="font-medium">Max HP</span>
-        <input
+      <label className="flex w-32 flex-col gap-1.5 text-sm">
+        <span className="font-medium text-fg">Max HP</span>
+        <Input
           name="hpMax"
           type="number"
           min={1}
           value={hpMax}
           onChange={(event) => setHpMax(event.target.value)}
-          className={inputClass}
         />
       </label>
 
       <fieldset className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <legend className="text-sm font-medium">Ability scores</legend>
-          <button
-            type="button"
+          <legend className="text-sm font-medium text-fg">Ability scores</legend>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => setStats(applyStandardArray())}
-            className="rounded-md border border-zinc-400 px-3 py-1 text-xs font-medium dark:border-zinc-600"
           >
             Standard array
-          </button>
+          </Button>
         </div>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           {ABILITY_KEYS.map((key) => (
-            <label key={key} className="flex flex-col gap-1 text-xs">
+            <label key={key} className="flex flex-col gap-1 text-xs text-fg-muted">
               <span className="font-medium">{ABILITY_LABELS[key]}</span>
-              <input
+              <Input
                 aria-label={ABILITY_LABELS[key]}
                 type="number"
                 min={1}
@@ -160,7 +153,6 @@ export function CharacterCreationForm({
                     [key]: Number(event.target.value),
                   }))
                 }
-                className={inputClass}
               />
             </label>
           ))}
@@ -169,20 +161,20 @@ export function CharacterCreationForm({
 
       <fieldset className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <legend className="text-sm font-medium">Inventory</legend>
-          <button
-            type="button"
+          <legend className="text-sm font-medium text-fg">Inventory</legend>
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() =>
               setInventory((prev) => [...prev, { name: '', qty: 1 }])
             }
-            className="rounded-md border border-zinc-400 px-3 py-1 text-xs font-medium dark:border-zinc-600"
           >
             Add item
-          </button>
+          </Button>
         </div>
         {inventory.map((item, index) => (
           <div key={index} className="flex items-center gap-2">
-            <input
+            <Input
               aria-label={`Item ${index + 1} name`}
               type="text"
               value={item.name}
@@ -194,9 +186,9 @@ export function CharacterCreationForm({
                   ),
                 )
               }
-              className={`flex-1 ${inputClass}`}
+              className="flex-1"
             />
-            <input
+            <Input
               aria-label={`Item ${index + 1} quantity`}
               type="number"
               min={1}
@@ -210,7 +202,7 @@ export function CharacterCreationForm({
                   ),
                 )
               }
-              className={`w-20 ${inputClass}`}
+              className="w-20"
             />
             <button
               type="button"
@@ -218,7 +210,7 @@ export function CharacterCreationForm({
               onClick={() =>
                 setInventory((prev) => prev.filter((_, i) => i !== index))
               }
-              className="rounded-md px-2 py-1 text-sm text-red-600"
+              className="px-2 py-1 text-sm text-danger hover:opacity-80"
             >
               ✕
             </button>
@@ -227,17 +219,13 @@ export function CharacterCreationForm({
       </fieldset>
 
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
+      <Button type="submit" size="lg" disabled={isSubmitting} className="self-start">
         {isSubmitting ? 'Saving…' : 'Create character'}
-      </button>
+      </Button>
     </form>
   );
 }

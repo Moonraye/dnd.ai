@@ -6,7 +6,7 @@ DunDrAI is a real-time multiplayer D&D platform with AI-driven Dungeon Masters a
 
 ---
 
-## Phase 0 — Foundation & Repo Hygiene
+## Phase 0 — Foundation & Repo Hygiene ✅ DONE
 
 **Goal:** Get the repo into a working, installable, version-controlled state before any feature code lands.
 
@@ -17,11 +17,8 @@ DunDrAI is a real-time multiplayer D&D platform with AI-driven Dungeon Masters a
 - `.env.example` added to both `client/` and `server/`
 - Stub FSD/module folders created (`client/src/{widgets,entities,shared}`, `server/src/{auth,user,game-session,ai,prisma}`)
 - Supabase project created; real env vars wired into `client/.env.local` and `server/.env`
-
-**Remaining:**
-
-- Initialize Prisma schema + run first migration (`server/prisma/schema.prisma`) — rolls into Phase 2
-- Commit this scaffolding work to git (currently uncommitted since "Initial commit")
+- Prisma schema initialized + first migration applied (landed in Phase 2)
+- Scaffolding committed to git
 
 **Primary files/modules:** `server/prisma/`, `client/.env.example`, `server/.env.example`
 

@@ -12,16 +12,16 @@ export function DiceRollCard({
   metadata,
 }: DiceRollCardProps) {
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col gap-1 rounded-md border border-indigo-300 bg-indigo-50 p-3 text-sm dark:border-indigo-800 dark:bg-indigo-950">
-      <div className="flex items-baseline justify-between">
-        <span className="font-semibold">
+    <div className="mx-auto flex w-full max-w-md flex-col gap-1 rounded-md border border-dice/40 bg-dice-subtle p-3 text-sm">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="font-semibold text-fg">
           🎲 {senderName} rolled {metadata.notation}
         </span>
-        <time dateTime={createdAt} className="text-xs text-zinc-500">
+        <time dateTime={createdAt} className="font-mono text-xs text-fg-subtle">
           {new Date(createdAt).toLocaleTimeString()}
         </time>
       </div>
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 font-mono text-xs text-fg-muted">
         {metadata.terms.map((term, index) =>
           isDiceTermResult(term) ? (
             <span key={index}>
@@ -34,7 +34,9 @@ export function DiceRollCard({
           ),
         )}
       </div>
-      <span className="text-base font-bold">Total: {metadata.total}</span>
+      <span className="text-base font-bold text-dice">
+        Total: {metadata.total}
+      </span>
     </div>
   );
 }

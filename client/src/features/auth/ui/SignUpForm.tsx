@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
+import { Button } from '@/shared/ui';
 import { useSignUp } from '../model/useSignUp';
 import { AuthField } from './AuthField';
 
@@ -17,7 +18,7 @@ export function SignUpForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-4" noValidate>
+    <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4" noValidate>
       <AuthField
         label="Username"
         name="username"
@@ -40,17 +41,13 @@ export function SignUpForm() {
         error={fieldErrors.password}
       />
       {error ? (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm text-danger">
           {error}
         </p>
       ) : null}
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="rounded-md bg-zinc-900 px-4 py-2 font-medium text-white disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-      >
+      <Button type="submit" size="lg" disabled={isSubmitting} className="mt-2 w-full">
         {isSubmitting ? 'Creating account…' : 'Create account'}
-      </button>
+      </Button>
     </form>
   );
 }

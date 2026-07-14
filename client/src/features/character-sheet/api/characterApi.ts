@@ -18,8 +18,13 @@ export function createCharacter(
 export function generateCharacterDraft(
   input: GenerateCharacterDraftInput,
 ): Promise<CharacterSheetInput> {
-  return apiFetch<CharacterSheetInput>('/ai/character-draft', {
-    method: 'POST',
-    body: JSON.stringify(input),
-  });
+  // AI generation is slower than CRUD; allow more headroom than the default.
+  return apiFetch<CharacterSheetInput>(
+    '/ai/character-draft',
+    {
+      method: 'POST',
+      body: JSON.stringify(input),
+    },
+    30_000,
+  );
 }

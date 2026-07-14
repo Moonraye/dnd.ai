@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   AiResponseSchema,
+  isDungeonMasterSheet,
   type AiStateUpdate,
   type ChatMessagePayload,
   type CharacterSheetPayload,
@@ -13,8 +14,14 @@ import { GENAI_CLIENT } from './genai.provider';
 import { PrismaService } from '../prisma/prisma.service';
 import { CharacterSheetService } from '../user/character-sheet.service';
 import { Prisma } from '../generated/prisma/client';
+import type {
+  ChatMessage,
+  ChatVisibility,
+  CharacterSheet,
+} from '../generated/prisma/client';
 import { coerceKeyFacts, toStateLogPayload } from './game-state-log.mapper';
 import { withGeminiRetry } from './gemini-retry';
+import { DiceService } from '../game-session/dice.service';
 
 // Flash-Lite (via its stable `-latest` alias) has a separate, more generous
 // free-tier daily quota than full Flash, so DM turns keep working when the
@@ -25,6 +32,11 @@ const MODEL = 'gemini-flash-lite-latest';
 // Bounds for the append-only campaign memory (COUNCIL-AUDIT Phase 1).
 const SUMMARY_CAP = 2000;
 const KEY_FACTS_CAP = 100;
+
+// Client-side abort for stalled upstream calls; withGeminiRetry only fires
+// once a request rejects, so without this a hung request blocks the turn
+// pipeline indefinitely.
+const GEMINI_TIMEOUT_MS = 30_000;
 
 /** Trim `text` to at most `max` chars, keeping the most recent tail on a word boundary. */
 function capTail(text: string, max: number): string {
@@ -161,6 +173,18 @@ const AI_RESPONSE_SCHEMA: Schema = {
         },
       },
     },
+    diceRolls: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          characterName: { type: Type.STRING },
+          notation: { type: Type.STRING },
+          reason: { type: Type.STRING },
+        },
+        required: ['characterName', 'notation', 'reason'],
+      },
+    },
   },
   required: ['messageText'],
 };
@@ -239,6 +263,7 @@ export class AiOrchestrationService {
     @Inject(GENAI_CLIENT) private readonly genai: GoogleGenAI,
     private readonly prisma: PrismaService,
     private readonly characterSheetService: CharacterSheetService,
+    private readonly diceService: DiceService,
   ) {}
 
   /**
@@ -251,6 +276,7 @@ export class AiOrchestrationService {
       updatedCharacters: CharacterSheetPayload[],
       stateLog: GameStateLogPayload | null,
     ) => void,
+    forceAgentId?: string,
   ): Promise<void> {
     // 1. Fetch AI participants in this session
     const aiSheets = await this.prisma.characterSheet.findMany({
@@ -270,12 +296,25 @@ export class AiOrchestrationService {
     if (messages.length === 0) return;
 
     const lastMessage = messages[0];
-    // Guard: only respond to HUMAN or SYSTEM events to avoid infinite AI loops
-    if (
-      lastMessage.senderType === 'AI_DM' ||
-      lastMessage.senderType === 'AI_PLAYER'
-    ) {
-      return;
+    // Guard: allow at most 1 hop of AI-to-AI responses (banter) before halting,
+    // to avoid infinite loops, unless explicitly forced.
+    if (!forceAgentId) {
+      const isLastMessageAi =
+        lastMessage.senderType === 'AI_DM' ||
+        lastMessage.senderType === 'AI_PLAYER';
+
+      if (isLastMessageAi) {
+        const secondLastMessage = messages[1];
+        const isSecondLastMessageAi =
+          secondLastMessage &&
+          (secondLastMessage.senderType === 'AI_DM' ||
+            secondLastMessage.senderType === 'AI_PLAYER');
+
+        if (isSecondLastMessageAi) {
+          // Stop: 2 consecutive AI responses have already occurred.
+          return;
+        }
+      }
     }
 
     // 3. Lazily load/create the campaign GameStateLog
@@ -294,27 +333,28 @@ export class AiOrchestrationService {
     }
 
     // 4. Select the active AI agent sheet to respond
-    // Find the DM if there is one, or select an AI player based on mentions/randomness
-    let agentSheet = aiSheets.find(
-      (s) =>
-        s.name.toLowerCase().includes('dm') ||
-        s.name.toLowerCase().includes('dungeon master'),
-    );
+    let agentSheet: CharacterSheet | undefined;
+    if (forceAgentId) {
+      agentSheet = aiSheets.find((s) => s.id === forceAgentId);
+    } else {
+      // Shared word-bounded heuristic (see session-limits.ts) so the DM pick
+      // and the role caps can never disagree on who the DM is.
+      agentSheet = aiSheets.find((s) => isDungeonMasterSheet(s));
 
-    if (!agentSheet) {
-      // If no explicit DM sheet, look for active AI players
-      const humanText = lastMessage.messageText.toLowerCase();
-      const mentionedAgent = aiSheets.find((s) =>
-        humanText.includes(s.name.toLowerCase()),
-      );
+      if (!agentSheet) {
+        const humanText = lastMessage.messageText.toLowerCase();
+        const mentionedAgent = aiSheets.find((s) =>
+          humanText.includes(s.name.toLowerCase()),
+        );
 
-      if (mentionedAgent) {
-        agentSheet = mentionedAgent;
-      } else {
-        // 20% chance to chime in randomly if not mentioned
-        const shouldChimeIn = Math.random() < 0.2;
-        if (shouldChimeIn) {
-          agentSheet = aiSheets[Math.floor(Math.random() * aiSheets.length)];
+        if (mentionedAgent) {
+          agentSheet = mentionedAgent;
+        } else {
+          // 20% chance to chime in randomly if not mentioned
+          const shouldChimeIn = Math.random() < 0.2;
+          if (shouldChimeIn) {
+            agentSheet = aiSheets[Math.floor(Math.random() * aiSheets.length)];
+          }
         }
       }
     }
@@ -327,17 +367,28 @@ export class AiOrchestrationService {
     });
 
     const contextSheets = sheets
-      .map(
-        (s) =>
-          `- ${s.name} (HP: ${s.hpCurrent}/${s.hpMax}, Stats: ${JSON.stringify(
-            s.stats,
-          )}, Inventory: ${JSON.stringify(s.inventory)})`,
-      )
+      .map((s) => {
+        const personaPart = s.persona ? `, Persona: ${s.persona}` : '';
+        return `- ${s.name} (HP: ${s.hpCurrent}/${s.hpMax}, Stats: ${JSON.stringify(
+          s.stats,
+        )}, Inventory: ${JSON.stringify(s.inventory)}${personaPart})`;
+      })
       .join('\n');
 
     const contextHistory = [...messages]
       .reverse()
-      .map((m) => `[${m.senderType}] ${m.senderName}: ${m.messageText}`)
+      .map((m) => {
+        let text = m.messageText;
+        if (m.visibility === 'WHISPER') {
+          const isParticipant =
+            m.senderCharacterId === agentSheet!.id ||
+            m.recipientCharacterId === agentSheet!.id;
+          if (!isParticipant) {
+            text = `${m.senderName} whispers to ${m.recipientName ?? 'someone'}...`;
+          }
+        }
+        return `[${m.senderType}] ${m.senderName}: ${text}`;
+      })
       .join('\n');
 
     const storySoFar =
@@ -375,7 +426,11 @@ ${contextSheets}
 Recent Chat History:
 ${contextHistory}
 
-Task: Respond as the participant named "${agentSheet.name}".`,
+Task: Respond as the participant named "${agentSheet.name}".${
+                    agentSheet.persona
+                      ? `\nYour Persona: ${agentSheet.persona}\nYou MUST stay in character and speak in the exact voice, tone, and personality described by this persona.`
+                      : ''
+                  }`,
                 },
               ],
             },
@@ -390,6 +445,7 @@ Task: Respond as the participant named "${agentSheet.name}".`,
             // larger cap.
             thinkingConfig: { thinkingBudget: 0 },
             maxOutputTokens: 2048,
+            httpOptions: { timeout: GEMINI_TIMEOUT_MS },
           },
         }),
       );
@@ -423,9 +479,23 @@ Task: Respond as the participant named "${agentSheet.name}".`,
     }
 
     const data = valResult.data;
-    const isDm =
-      agentSheet.name.toLowerCase().includes('dm') ||
-      agentSheet.name.toLowerCase().includes('dungeon master');
+    const isDm = isDungeonMasterSheet(agentSheet);
+
+    // Determine if AI's reply should be a whisper
+    let visibility: ChatVisibility = 'PUBLIC';
+    let recipientUserId: string | null = null;
+    let recipientCharacterId: string | null = null;
+    let recipientName: string | null = null;
+
+    if (
+      lastMessage.visibility === 'WHISPER' &&
+      lastMessage.recipientCharacterId === agentSheet.id
+    ) {
+      visibility = 'WHISPER';
+      recipientUserId = lastMessage.senderUserId;
+      recipientCharacterId = lastMessage.senderCharacterId;
+      recipientName = lastMessage.senderName;
+    }
 
     // 8. Write AI Chat Message
     const createdMsg = await this.prisma.chatMessage.create({
@@ -434,81 +504,147 @@ Task: Respond as the participant named "${agentSheet.name}".`,
         senderType: isDm ? 'AI_DM' : 'AI_PLAYER',
         senderName: agentSheet.name,
         messageText: data.messageText,
+        visibility,
+        senderCharacterId: agentSheet.id,
+        recipientUserId,
+        recipientCharacterId,
+        recipientName,
       },
     });
+
+    // Execute AI-initiated dice rolls
+    const rolledMessages: any[] = [];
+    if (data.diceRolls && data.diceRolls.length > 0) {
+      for (const roll of data.diceRolls) {
+        try {
+          const rollResult = this.diceService.roll(
+            roll.notation,
+            roll.characterName,
+          );
+          const rollMsg = await this.prisma.chatMessage.create({
+            data: {
+              sessionId,
+              senderType: 'SYSTEM',
+              senderName: roll.characterName,
+              messageText: rollResult.messageText,
+              visibility: 'PUBLIC',
+              metadata: rollResult.metadata as any,
+            },
+          });
+          rolledMessages.push(rollMsg);
+        } catch (error) {
+          this.logger.warn(
+            `AI-initiated dice roll failed for notation "${roll.notation}": ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
+    }
 
     const updatedCharacters: CharacterSheetPayload[] = [];
     let stateLogPayload: GameStateLogPayload | null = null;
 
-    // 9. Process state updates
-    if (data.stateUpdate) {
-      const update = data.stateUpdate;
-
-      // Persist campaign-log fields (quests/NPCs/summary/keyFacts) when the AI
-      // touched them; hp/inventory-only updates leave campaign memory unchanged.
-      stateLogPayload = await this.applyStateLogUpdate(stateLog, update);
-
-      // Apply HP Changes
-      if (update.hpChanges) {
-        for (const hpChange of update.hpChanges) {
-          const char = sheets.find(
-            (s) =>
-              s.name.toLowerCase() === hpChange.characterName.toLowerCase(),
-          );
-          if (char) {
-            const nextHp = Math.max(
-              0,
-              Math.min(char.hpMax, char.hpCurrent + hpChange.delta),
-            );
-            const updated = await this.characterSheetService.updateSheetById(
-              char.id,
-              { hpCurrent: nextHp },
-            );
-            updatedCharacters.push(updated);
-          }
-        }
-      }
-
-      // Apply Inventory Changes
-      if (update.inventoryChanges) {
-        for (const invChange of update.inventoryChanges) {
-          const char = sheets.find(
-            (s) =>
-              s.name.toLowerCase() === invChange.characterName.toLowerCase(),
-          );
-          if (char) {
-            const currentInv = (char.inventory as InventoryItem[]) || [];
-            let nextInv = [...currentInv];
-
-            const idx = nextInv.findIndex(
-              (item) =>
-                item.name.toLowerCase() === invChange.item.toLowerCase(),
-            );
-
-            if (idx === -1) {
-              if (invChange.qty > 0) {
-                nextInv.push({ name: invChange.item, qty: invChange.qty });
-              }
-            } else {
-              const nextQty = nextInv[idx].qty + invChange.qty;
-              if (nextQty <= 0) {
-                nextInv = nextInv.filter((_, i) => i !== idx);
-              } else {
-                nextInv[idx] = { ...nextInv[idx], qty: nextQty };
+    // 9. Process state updates. Wrapped in try/catch so a failure here
+    // (state-log or sheet write) can never swallow the broadcast below — the
+    // persisted AI message and every write that DID commit are always emitted,
+    // keeping clients in sync with the database even when a later write fails.
+    try {
+      if (data.stateUpdate) {
+        let update = data.stateUpdate;
+        if (!isDm) {
+          // Non-DM companions can only update their own relationship key,
+          // and cannot touch quests, campaign summary, or canon keyFacts.
+          const filteredRels: Record<string, string> = {};
+          if (update.npcRelationships) {
+            const agentNameLower = agentSheet.name.toLowerCase();
+            for (const [key, val] of Object.entries(update.npcRelationships)) {
+              if (key.toLowerCase() === agentNameLower) {
+                filteredRels[key] = val;
               }
             }
+          }
+          update = {
+            ...update,
+            activeQuests: undefined,
+            campaignSummary: undefined,
+            keyFacts: undefined,
+            npcRelationships:
+              Object.keys(filteredRels).length > 0 ? filteredRels : undefined,
+          };
+        }
 
-            const updated = await this.characterSheetService.updateSheetById(
-              char.id,
-              { inventory: nextInv },
+        // Persist campaign-log fields (quests/NPCs/summary/keyFacts) when the AI
+        // touched them; hp/inventory-only updates leave campaign memory unchanged.
+        stateLogPayload = await this.applyStateLogUpdate(stateLog, update);
+
+        // Apply HP Changes
+        if (update.hpChanges) {
+          for (const hpChange of update.hpChanges) {
+            const char = sheets.find(
+              (s) =>
+                s.name.toLowerCase() === hpChange.characterName.toLowerCase(),
             );
-            // Avoid duplicate sheets in updated list
-            if (!updatedCharacters.some((c) => c.id === updated.id)) {
+            if (char) {
+              const nextHp = Math.max(
+                0,
+                Math.min(char.hpMax, char.hpCurrent + hpChange.delta),
+              );
+              const updated = await this.characterSheetService.updateSheetById(
+                char.id,
+                { hpCurrent: nextHp },
+              );
               updatedCharacters.push(updated);
             }
           }
         }
+
+        // Apply Inventory Changes
+        if (update.inventoryChanges) {
+          for (const invChange of update.inventoryChanges) {
+            const char = sheets.find(
+              (s) =>
+                s.name.toLowerCase() === invChange.characterName.toLowerCase(),
+            );
+            if (char) {
+              const currentInv = (char.inventory as InventoryItem[]) || [];
+              let nextInv = [...currentInv];
+
+              const idx = nextInv.findIndex(
+                (item) =>
+                  item.name.toLowerCase() === invChange.item.toLowerCase(),
+              );
+
+              if (idx === -1) {
+                if (invChange.qty > 0) {
+                  nextInv.push({ name: invChange.item, qty: invChange.qty });
+                }
+              } else {
+                const nextQty = nextInv[idx].qty + invChange.qty;
+                if (nextQty <= 0) {
+                  nextInv = nextInv.filter((_, i) => i !== idx);
+                } else {
+                  nextInv[idx] = { ...nextInv[idx], qty: nextQty };
+                }
+              }
+
+              const updated = await this.characterSheetService.updateSheetById(
+                char.id,
+                { inventory: nextInv },
+              );
+              // Avoid duplicate sheets in updated list
+              if (!updatedCharacters.some((c) => c.id === updated.id)) {
+                updatedCharacters.push(updated);
+              }
+            }
+          }
+        }
       }
+    } catch (error) {
+      this.logger.error(
+        'State update failed after the AI message was persisted; broadcasting committed state',
+        error as Error,
+      );
     }
 
     // 10. Broadcast narrative chat, HUD state updates, and campaign memory.
@@ -520,10 +656,35 @@ Task: Respond as the participant named "${agentSheet.name}".`,
         senderName: createdMsg.senderName,
         messageText: createdMsg.messageText,
         createdAt: createdMsg.createdAt.toISOString(),
+        visibility: createdMsg.visibility,
+        recipientId:
+          createdMsg.recipientCharacterId || createdMsg.recipientUserId || null,
+        recipientName: createdMsg.recipientName,
       },
       updatedCharacters,
       stateLogPayload,
     );
+
+    // Broadcast rolled cards as separate events
+    for (const rollMsg of rolledMessages) {
+      onBroadcast(
+        {
+          id: rollMsg.id,
+          sessionId: rollMsg.sessionId,
+          senderType: rollMsg.senderType,
+          senderName: rollMsg.senderName,
+          messageText: rollMsg.messageText,
+          createdAt: rollMsg.createdAt.toISOString(),
+          visibility: rollMsg.visibility,
+          metadata: rollMsg.metadata as any,
+          recipientId:
+            rollMsg.recipientCharacterId || rollMsg.recipientUserId || null,
+          recipientName: rollMsg.recipientName,
+        },
+        [],
+        null,
+      );
+    }
   }
 
   /**
@@ -540,7 +701,11 @@ Task: Respond as the participant named "${agentSheet.name}".`,
     update: AiStateUpdate,
   ): Promise<GameStateLogPayload | null> {
     const data: Prisma.GameStateLogUpdateInput = {};
-    if (update.activeQuests) data.activeQuests = update.activeQuests;
+    // Skip empty arrays like the other state fields: a model-emitted `[]`
+    // must never wipe the stored quest log (non-lossy memory).
+    if (update.activeQuests && update.activeQuests.length > 0) {
+      data.activeQuests = update.activeQuests;
+    }
     if (update.npcRelationships) {
       data.npcRelationships = update.npcRelationships;
     }

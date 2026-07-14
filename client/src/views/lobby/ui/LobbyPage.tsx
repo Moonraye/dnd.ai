@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
-import { CreateLobbyForm, LobbyList } from '@/features/lobby';
+import { CreateCampaignDialog, LobbyList } from '@/features/lobby';
 import { useAuthStore } from '@/shared/store/authStore';
 import { Header } from '@/widgets/header';
 
@@ -18,19 +18,16 @@ export function LobbyPage() {
     return (
       <>
         <Header />
-        <main className="flex flex-1 flex-col items-center gap-8 p-8 animate-pulse">
-          <section className="flex w-full flex-col items-center gap-4">
-            <div className="h-8 w-48 rounded bg-zinc-200 dark:bg-zinc-800" />
-            <div className="h-10 w-full max-w-md rounded bg-zinc-200 dark:bg-zinc-800" />
-          </section>
-          <section className="flex w-full flex-col items-center gap-4">
-            <div className="h-7 w-32 rounded bg-zinc-200 dark:bg-zinc-800" />
-            <div className="flex w-full max-w-md flex-col gap-3">
-              <div className="h-16 w-full rounded bg-zinc-200 dark:bg-zinc-800" />
-              <div className="h-16 w-full rounded bg-zinc-200 dark:bg-zinc-800" />
-              <div className="h-16 w-full rounded bg-zinc-200 dark:bg-zinc-800" />
-            </div>
-          </section>
+        <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
+          <div className="mb-8 h-9 w-56 animate-pulse rounded bg-bg-subtle" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="h-28 animate-pulse rounded-lg border border-border bg-bg-subtle"
+              />
+            ))}
+          </div>
         </main>
       </>
     );
@@ -41,15 +38,19 @@ export function LobbyPage() {
   return (
     <>
       <Header />
-      <main className="flex flex-1 flex-col items-center gap-8 p-8">
-        <section className="flex w-full flex-col items-center gap-4">
-          <h1 className="text-2xl font-semibold">Start a new campaign</h1>
-          <CreateLobbyForm />
-        </section>
-        <section className="flex w-full flex-col items-center gap-4">
-          <h2 className="text-xl font-semibold">Open lobbies</h2>
-          <LobbyList />
-        </section>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-10">
+        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
+              Choose your table
+            </h1>
+            <p className="mt-1 text-sm text-fg-muted">
+              Join an open campaign, or start one of your own.
+            </p>
+          </div>
+          <CreateCampaignDialog />
+        </div>
+        <LobbyList />
       </main>
     </>
   );

@@ -17,7 +17,8 @@ model User {
   createdAt DateTime @default(now())
 
   campaignSessions CampaignSession[]
-  characterSheets  CharacterSheet[]
+  characterSheets  CharacterSheet[]  @relation("CharacterUser")
+  ownedCharacters  CharacterSheet[]  @relation("CharacterOwner")
   sessionMembers   SessionMember[]
 }
 
@@ -32,6 +33,11 @@ enum SenderType {
   AI_DM
   AI_PLAYER
   SYSTEM
+}
+
+enum ChatVisibility {
+  PUBLIC
+  WHISPER
 }
 
 model CampaignSession {
@@ -53,7 +59,9 @@ model CampaignSession {
 model CharacterSheet {
   id         String          @id @default(uuid()) @db.Uuid
   userId     String?         @db.Uuid
-  user       User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User?           @relation("CharacterUser", fields: [userId], references: [id], onDelete: Cascade)
+  ownerId    String?         @db.Uuid
+  owner      User?           @relation("CharacterOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   sessionId  String          @db.Uuid
   session    CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   name       String
@@ -63,21 +71,29 @@ model CharacterSheet {
   inventory  Json            @default("[]")
   aiProvider String? // ADR 4: e.g. "google"; null = human-controlled
   aiModel    String? // ADR 4: e.g. "gemini-2.5-flash"
+  persona    String?
 
   @@unique([userId, sessionId])
   @@index([sessionId])
   @@index([userId])
+  @@index([ownerId])
 }
 
 model ChatMessage {
-  id          String          @id @default(uuid()) @db.Uuid
-  sessionId   String          @db.Uuid
-  session     CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  senderType  SenderType
-  senderName  String
-  messageText String
+  id                   String          @id @default(uuid()) @db.Uuid
+  sessionId            String          @db.Uuid
+  session              CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderType           SenderType
+  senderName           String
+  messageText          String
   // Structured dice-roll payload on SYSTEM messages; null for plain chat.
-  metadata    Json?
+  metadata             Json?
+  visibility           ChatVisibility  @default(PUBLIC)
+  senderUserId         String?         @db.Uuid
+  senderCharacterId    String?         @db.Uuid
+  recipientUserId      String?         @db.Uuid
+  recipientCharacterId String?         @db.Uuid
+  recipientName        String?
   createdAt   DateTime        @default(now())
 
   @@index([sessionId, createdAt])

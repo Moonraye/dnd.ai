@@ -1,0 +1,186 @@
+@import "tailwindcss";
+
+/* Drive Tailwind's `dark:` variant off the explicit theme attribute so existing
+   `dark:` utilities follow the in-app toggle (not the OS). Set by ThemeProvider
+   / themeInitScript on <html data-theme="…">. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ============================================================================
+   DunDrAI — design tokens  (F1: pipeline + base tokens)
+   Palette identity: "Candle & Grimoire" — a spellbook opened at a candlelit
+   table. The dark ground is violet-tinted ink (not neutral black); muted text
+   is dusty lavender; the primary is a luminous arcane violet that reads as
+   glow; ember is the warm torchlight counterpoint.
+
+   Two token layers:
+     1. Switchable layer  — short names (--bg, --fg…) that flip per theme.
+     2. Tailwind mapping   — @theme inline exposes them as utilities
+                              (bg-surface, text-fg-muted, border-border…).
+
+   Theme is driven by an explicit [data-theme] attribute (ThemeProvider +
+   in-app toggle). No stored choice → the init script follows the OS on first
+   visit; :root is the light fallback if JS is unavailable.
+   ========================================================================== */
+
+/* ---- Switchable layer: light (day scriptorium — cool vellum) ---- */
+:root {
+  --bg: #f6f4fb;
+  --bg-subtle: #eeebf6;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --overlay: rgb(28 24 48 / 0.45);
+  --border: #e4e0f0;
+  --border-strong: #cfc8e4;
+  --fg: #1c1830;
+  --fg-muted: #575074;
+  --fg-subtle: #847ba0;
+  --primary: #6d3aed;
+  --primary-hover: #5b28d6;
+  --primary-active: #4c1fb8;
+  --primary-fg: #ffffff;
+  --primary-subtle: #ece5fd;
+  --accent: #d9660a;
+  --accent-hover: #bd530a;
+  --accent-fg: #ffffff;
+  --ring: #6d3aed;
+  --success: #128a53;
+  --warning: #c47f16;
+  --danger: #d63d47;
+  --danger-fg: #ffffff;
+  --dice: #5566e6;
+  --dice-subtle: #ecebfd;
+
+  --shadow-sm: 0 1px 2px rgb(28 24 48 / 0.07);
+  --shadow-md: 0 4px 14px rgb(28 24 48 / 0.10);
+  --shadow-lg: 0 14px 36px rgb(28 24 48 / 0.14);
+  --glow-primary: 0 0 0 1px var(--primary), 0 0 18px rgb(109 58 237 / 0.22);
+}
+
+/* ---- Switchable layer: dark (candlelit ink — the primary identity) ---- */
+[data-theme="dark"] {
+  --bg: #0d0b16;
+  --bg-subtle: #141026;
+  --surface: #181329;
+  --surface-raised: #211a37;
+  --overlay: rgb(6 4 14 / 0.72);
+  --border: #2c2544;
+  --border-strong: #3f3660;
+  --fg: #f2eefb;
+  --fg-muted: #a89fc4;
+  --fg-subtle: #6f668c;
+  --primary: #9d7bff;
+  --primary-hover: #b6a0ff;
+  --primary-active: #8663f0;
+  --primary-fg: #150c2e; /* dark ink on luminous violet — higher contrast */
+  --primary-subtle: #241a44;
+  --accent: #f6851f;
+  --accent-hover: #ff9c3d;
+  --accent-fg: #1c0f04;
+  --ring: #b6a0ff;
+  --success: #3fca7d;
+  --warning: #f5b53f;
+  --danger: #f2555a;
+  --danger-fg: #1a0406;
+  --dice: #8aa2ff;
+  --dice-subtle: #1c1b42;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 6px 18px rgb(0 0 0 / 0.55);
+  --shadow-lg: 0 16px 40px rgb(0 0 0 / 0.65);
+  --glow-primary: 0 0 0 1px var(--primary), 0 0 22px rgb(157 123 255 / 0.32);
+}
+
+/* ---- Tailwind mapping: expose switchable vars as utilities ---- */
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-subtle: var(--bg-subtle);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-overlay: var(--overlay);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-active: var(--primary-active);
+  --color-primary-fg: var(--primary-fg);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-fg: var(--accent-fg);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-fg);
+  --color-dice: var(--dice);
+  --color-dice-subtle: var(--dice-subtle);
+
+  /* Type — body/mono wired via next/font in layout.tsx; display gets a
+     characterful serif fallback until F2 loads the real display face. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", monospace;
+  --font-display: var(--font-display-face), "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+}
+
+/* ---- Base ---- */
+@layer base {
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Typography carries the personality — headings speak in the display voice. */
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  /* Quality floor: a visible, on-brand focus ring everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--primary);
+    color: var(--primary-fg);
+  }
+}
+
+/* The AI DM's caret — used in the landing hero as the scene is written. */
+@keyframes blink {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* Respect reduced-motion as a baseline. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

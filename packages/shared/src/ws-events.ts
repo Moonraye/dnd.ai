@@ -6,6 +6,7 @@ import type {
   InventoryItem,
   SenderType,
   SessionStatus,
+  ChatVisibility,
 } from './types';
 
 /** Socket.io event names shared by client and server (ADR 1). */
@@ -22,8 +23,12 @@ export const WS_EVENTS = {
   UPDATE_CHARACTER: 'character:update',
   /** server → client broadcast: a character sheet in the room changed. */
   CHARACTER_UPDATED: 'character:updated',
+  /** server → client broadcast: a companion was deleted. */
+  CHARACTER_DELETED: 'character:deleted',
   /** server → client broadcast: the AI mutated the campaign state log. */
   STATE_LOG_UPDATED: 'state-log:updated',
+  /** server → client broadcast: a companion's thinking state updated. */
+  AI_THINKING: 'ai:thinking',
 } as const;
 
 export const JoinSessionSchema = z.object({
@@ -66,6 +71,9 @@ export interface ChatMessagePayload {
    * Optional/nullable: legacy rows and plain chat carry no metadata.
    */
   metadata?: DiceRollMetadata | null;
+  visibility: ChatVisibility;
+  recipientId?: string | null;
+  recipientName?: string | null;
 }
 
 /** Wire representation of a persisted character sheet. */
@@ -80,6 +88,8 @@ export interface CharacterSheetPayload {
   inventory: InventoryItem[];
   aiProvider: string | null;
   aiModel: string | null;
+  ownerId: string | null;
+  persona: string | null;
 }
 
 /**

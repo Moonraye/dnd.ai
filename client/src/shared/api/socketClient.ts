@@ -13,16 +13,24 @@ let socket: Socket | null = null;
  */
 export function getSocket(): Socket {
   if (!socket) {
-    socket = io(process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:3001', {
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+    if (!wsUrl && process.env.NODE_ENV === 'production') {
+      // Fail fast instead of silently pointing a deployed build at localhost.
+      throw new Error('NEXT_PUBLIC_WS_URL must be set in production builds');
+    }
+    socket = io(wsUrl ?? 'http://localhost:3001', {
       autoConnect: false,
       auth: (cb) => {
         const cachedToken = useAuthStore.getState().session?.access_token;
         if (cachedToken) {
           cb({ token: cachedToken });
         } else {
+          // Always invoke cb — a rejected getSession() would otherwise leave
+          // the handshake hanging until the connect timeout, on every retry.
           void getSupabaseClient()
             .auth.getSession()
-            .then(({ data }) => cb({ token: data.session?.access_token ?? '' }));
+            .then(({ data }) => cb({ token: data.session?.access_token ?? '' }))
+            .catch(() => cb({ token: '' }));
         }
       },
     });

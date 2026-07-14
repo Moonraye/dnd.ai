@@ -1,5 +1,6 @@
 export { SignInForm } from './ui/SignInForm';
 export { SignUpForm } from './ui/SignUpForm';
+export { AuthShell } from './ui/AuthShell';
 export { SignOutButton } from './ui/SignOutButton';
 export { AuthProvider } from './ui/AuthProvider';
 export { useSignIn } from './model/useSignIn';

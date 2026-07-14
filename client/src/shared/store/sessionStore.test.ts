@@ -11,6 +11,7 @@ const makeMessage = (
   senderName: 'Tester',
   messageText: `message ${id}`,
   createdAt,
+  visibility: 'PUBLIC',
 });
 
 const makeCharacter = (
@@ -27,6 +28,8 @@ const makeCharacter = (
   inventory: [],
   aiProvider: null,
   aiModel: null,
+  ownerId: null,
+  persona: null,
 });
 
 describe('sessionStore', () => {

@@ -4,12 +4,14 @@ import type {
   DiceRollMetadata,
   GameStateLogPayload,
   SessionSummary,
+  SenderType,
 } from '@dnd/shared';
 import type {
   CampaignSession,
   ChatMessage,
-  Prisma,
+  ChatVisibility,
 } from '../generated/prisma/client';
+import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { toStateLogPayload } from '../ai/game-state-log.mapper';
 import type { CreateLobbyDto } from './dto/create-lobby.dto';
@@ -67,11 +69,31 @@ export class GameSessionService {
     sessionId: string,
     senderName: string,
     messageText: string,
+    options?: {
+      senderType?: SenderType;
+      visibility?: ChatVisibility;
+      senderUserId?: string | null;
+      senderCharacterId?: string | null;
+      recipientUserId?: string | null;
+      recipientCharacterId?: string | null;
+      recipientName?: string | null;
+    },
   ): Promise<ChatMessagePayload> {
     const message = await this.prisma.chatMessage.create({
-      data: { sessionId, senderType: 'HUMAN', senderName, messageText },
+      data: {
+        sessionId,
+        senderType: options?.senderType ?? 'HUMAN',
+        senderName,
+        messageText,
+        visibility: options?.visibility ?? 'PUBLIC',
+        senderUserId: options?.senderUserId ?? null,
+        senderCharacterId: options?.senderCharacterId ?? null,
+        recipientUserId: options?.recipientUserId ?? null,
+        recipientCharacterId: options?.recipientCharacterId ?? null,
+        recipientName: options?.recipientName ?? null,
+      },
     });
-    return this.toChatPayload(message);
+    return this.toChatPayload(message, options?.senderUserId || undefined);
   }
 
   /**
@@ -82,7 +104,7 @@ export class GameSessionService {
     sessionId: string,
     senderName: string,
     messageText: string,
-    metadata: DiceRollMetadata,
+    metadata?: DiceRollMetadata | null,
   ): Promise<ChatMessagePayload> {
     const message = await this.prisma.chatMessage.create({
       data: {
@@ -90,7 +112,7 @@ export class GameSessionService {
         senderType: 'SYSTEM',
         senderName,
         messageText,
-        metadata: metadata as unknown as Prisma.InputJsonValue,
+        metadata: metadata ? (metadata as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
       },
     });
     return this.toChatPayload(message);
@@ -103,6 +125,7 @@ export class GameSessionService {
   async getMessagesSince(
     sessionId: string,
     since?: string,
+    userId?: string,
   ): Promise<ChatMessagePayload[]> {
     const messages = await this.prisma.chatMessage.findMany({
       where: {
@@ -112,7 +135,7 @@ export class GameSessionService {
       orderBy: { createdAt: since ? 'asc' : 'desc' },
       take: RECENT_MESSAGES_LIMIT,
     });
-    const payloads = messages.map((message) => this.toChatPayload(message));
+    const payloads = messages.map((message) => this.toChatPayload(message, userId));
     return since ? payloads : payloads.reverse();
   }
 
@@ -127,6 +150,12 @@ export class GameSessionService {
     return log ? toStateLogPayload(log) : null;
   }
 
+  async getChatMessageById(id: string): Promise<ChatMessage | null> {
+    return this.prisma.chatMessage.findUnique({
+      where: { id },
+    });
+  }
+
   private toSessionSummary(session: CampaignSession): SessionSummary {
     return {
       id: session.id,
@@ -137,14 +166,26 @@ export class GameSessionService {
     };
   }
 
-  private toChatPayload(message: ChatMessage): ChatMessagePayload {
+  toChatPayload(message: ChatMessage, userId?: string): ChatMessagePayload {
+    let text = message.messageText;
+    if (message.visibility === 'WHISPER') {
+      const isAuthorized =
+        userId &&
+        (userId === message.senderUserId || userId === message.recipientUserId);
+      if (!isAuthorized) {
+        text = `${message.senderName} whispers to ${message.recipientName ?? 'someone'}...`;
+      }
+    }
     return {
       id: message.id,
       sessionId: message.sessionId,
       senderType: message.senderType,
       senderName: message.senderName,
-      messageText: message.messageText,
+      messageText: text,
       metadata: (message.metadata as DiceRollMetadata | null) ?? null,
+      visibility: message.visibility,
+      recipientId: message.recipientCharacterId || message.recipientUserId || null,
+      recipientName: message.recipientName,
       createdAt: message.createdAt.toISOString(),
     };
   }

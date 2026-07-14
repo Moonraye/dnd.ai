@@ -2,6 +2,7 @@ import type { GoogleGenAI } from '@google/genai';
 import { AiOrchestrationService } from './ai-orchestration.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { CharacterSheetService } from '../user/character-sheet.service';
+import type { DiceService } from '../game-session/dice.service';
 
 describe('AiOrchestrationService', () => {
   const generateContent = jest.fn();
@@ -34,10 +35,16 @@ describe('AiOrchestrationService', () => {
     updateSheetById: characterSheetServiceUpdateSheetById,
   } as unknown as CharacterSheetService;
 
+  const roll = jest.fn();
+  const diceService = {
+    roll,
+  } as unknown as DiceService;
+
   const service = new AiOrchestrationService(
     genai,
     prisma,
     characterSheetService,
+    diceService,
   );
 
   beforeEach(() => jest.resetAllMocks());
@@ -165,6 +172,11 @@ describe('AiOrchestrationService', () => {
         senderType: 'AI_DM',
         senderName: 'Dungeon Master',
         messageText: 'The orc falls.',
+        senderCharacterId: 'ai-sheet-uuid',
+        recipientUserId: null,
+        recipientCharacterId: null,
+        recipientName: null,
+        visibility: 'PUBLIC',
       },
     });
     expect(characterSheetServiceUpdateSheetById).toHaveBeenCalledWith(
@@ -510,5 +522,193 @@ describe('AiOrchestrationService', () => {
     expect(prismaCreateMessage).not.toHaveBeenCalled();
     expect(prismaUpdateStateLog).not.toHaveBeenCalled();
     expect(onBroadcast).not.toHaveBeenCalled();
+  });
+
+  describe('Phase C: Interactivity Tests', () => {
+    it('executes and broadcasts AI-initiated dice rolls', async () => {
+      prismaFindManySheets.mockResolvedValue([
+        {
+          id: 'companion-uuid',
+          name: 'Gimli',
+          aiProvider: 'google',
+          aiModel: 'gemini-flash-latest',
+          hpCurrent: 20,
+          hpMax: 20,
+          stats: {},
+          inventory: [],
+        },
+      ]);
+      prismaFindManyMessages.mockResolvedValue([
+        { senderType: 'HUMAN', senderName: 'Player', messageText: 'Jump the chasm!' },
+      ]);
+      prismaFindUniqueStateLog.mockResolvedValue({
+        id: 'log-uuid',
+        activeQuests: [],
+      });
+      prismaCreateMessage.mockResolvedValue({
+        id: 'msg-uuid',
+        sessionId: 'session-uuid',
+        senderType: 'AI_PLAYER',
+        senderName: 'Gimli',
+        messageText: 'I jump!',
+        createdAt: new Date(),
+      });
+
+      generateContent.mockResolvedValue({
+        text: JSON.stringify({
+          messageText: 'I jump!',
+          diceRolls: [
+            { characterName: 'Gimli', notation: '1d20+5', reason: 'athletics check' },
+          ],
+        }),
+      });
+
+      roll.mockReturnValue({
+        messageText: 'Gimli rolled 1d20+5 → 18',
+        metadata: { kind: 'dice_roll', total: 18 },
+      });
+
+      const onBroadcast = jest.fn();
+      await service.evaluateTurns('session-uuid', onBroadcast, 'companion-uuid');
+
+      expect(roll).toHaveBeenCalledWith('1d20+5', 'Gimli');
+      expect(prismaCreateMessage).toHaveBeenCalledTimes(2);
+      expect(onBroadcast).toHaveBeenCalledTimes(2);
+    });
+
+    it('strips DM-only fields and filters relationship keys for non-DM sheets', async () => {
+      prismaFindManySheets.mockResolvedValue([
+        {
+          id: 'companion-uuid',
+          name: 'Gimli',
+          aiProvider: 'google',
+          aiModel: 'gemini-flash-latest',
+          hpCurrent: 20,
+          hpMax: 20,
+          stats: {},
+          inventory: [],
+        },
+      ]);
+      prismaFindManyMessages.mockResolvedValue([
+        { senderType: 'HUMAN', senderName: 'Player', messageText: 'Hello companion' },
+      ]);
+      prismaFindUniqueStateLog.mockResolvedValue({
+        id: 'log-uuid',
+        activeQuests: [],
+      });
+      prismaCreateMessage.mockResolvedValue({
+        id: 'msg-uuid',
+        sessionId: 'session-uuid',
+        senderType: 'AI_PLAYER',
+        senderName: 'Gimli',
+        messageText: 'Hello!',
+        createdAt: new Date(),
+      });
+      prismaUpdateStateLog.mockResolvedValue({
+        id: 'log-uuid',
+        sessionId: 'session-uuid',
+        activeQuests: [],
+        npcRelationships: { Gimli: 'Likes Thorin' },
+        campaignSummary: { text: '' },
+        keyFacts: [],
+        updatedAt: new Date(),
+      });
+
+      generateContent.mockResolvedValue({
+        text: JSON.stringify({
+          messageText: 'Hello!',
+          stateUpdate: {
+            activeQuests: ['Defeat the dragon'],
+            campaignSummary: 'The quest began.',
+            keyFacts: [{ text: 'Gimli met Legolas', source: 'dm' }],
+            npcRelationships: {
+              Gimli: 'Likes Thorin',
+              Legolas: 'Likes Aragorn',
+            },
+          },
+        }),
+      });
+
+      await service.evaluateTurns('session-uuid', jest.fn(), 'companion-uuid');
+
+      expect(prismaUpdateStateLog).toHaveBeenCalledTimes(1);
+      const updateArg = prismaUpdateStateLog.mock.calls[0][0] as {
+        data: Record<string, unknown>;
+      };
+      // Quests, summary, and keyFacts are stripped for companion
+      expect(updateArg.data).not.toHaveProperty('activeQuests');
+      expect(updateArg.data).not.toHaveProperty('campaignSummary');
+      expect(updateArg.data).not.toHaveProperty('keyFacts');
+      // Relationships contains only Gimli's own attitude key
+      const rels = updateArg.data.npcRelationships as Record<string, string>;
+      expect(rels).toHaveProperty('Gimli');
+      expect(rels).not.toHaveProperty('Legolas');
+    });
+
+    it('permits 1-hop AI banter but halts on 2 consecutive AI responses', async () => {
+      prismaFindManySheets.mockResolvedValue([
+        {
+          id: 'dm-sheet-uuid',
+          name: 'Dungeon Master',
+          aiProvider: 'google',
+          aiModel: 'gemini-flash-latest',
+          hpCurrent: 100,
+          hpMax: 100,
+          stats: {},
+          inventory: [],
+        },
+      ]);
+      prismaFindUniqueStateLog.mockResolvedValue({
+        id: 'log-uuid',
+        activeQuests: [],
+      });
+      prismaCreateMessage.mockResolvedValue({
+        id: 'msg-uuid',
+        sessionId: 'session-uuid',
+        senderType: 'AI_DM',
+        senderName: 'Dungeon Master',
+        messageText: 'I watch.',
+        createdAt: new Date(),
+      });
+
+      // 1. One AI message after a human message: Banter allowed (1 hop)
+      prismaFindManyMessages.mockResolvedValue([
+        { senderType: 'AI_DM', senderName: 'Dungeon Master', messageText: 'The dragon roars.' },
+        { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
+      ]);
+      generateContent.mockResolvedValue({
+        text: JSON.stringify({ messageText: 'I watch.' }),
+      });
+
+      await service.evaluateTurns('session-uuid', jest.fn());
+      expect(generateContent).toHaveBeenCalledTimes(1);
+
+      // 2. Two consecutive AI messages: Halt banter (2 hops)
+      jest.clearAllMocks();
+      prismaFindManySheets.mockResolvedValue([
+        {
+          id: 'dm-sheet-uuid',
+          name: 'Dungeon Master',
+          aiProvider: 'google',
+          aiModel: 'gemini-flash-latest',
+          hpCurrent: 100,
+          hpMax: 100,
+          stats: {},
+          inventory: [],
+        },
+      ]);
+      prismaFindUniqueStateLog.mockResolvedValue({
+        id: 'log-uuid',
+        activeQuests: [],
+      });
+      prismaFindManyMessages.mockResolvedValue([
+        { senderType: 'AI_PLAYER', senderName: 'Gimli', messageText: 'I hit!' },
+        { senderType: 'AI_DM', senderName: 'Dungeon Master', messageText: 'The dragon roars.' },
+        { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
+      ]);
+
+      await service.evaluateTurns('session-uuid', jest.fn());
+      expect(generateContent).not.toHaveBeenCalled();
+    });
   });
 });

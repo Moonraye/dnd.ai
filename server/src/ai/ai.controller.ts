@@ -7,10 +7,9 @@ import { GenerateCharacterDraftDto } from './dto/generate-character-draft.dto';
 
 @Controller('ai')
 @UseGuards(SupabaseAuthGuard)
-@Throttle({
-  default: { limit: 5, ttl: 60000 },
-  ai: { limit: 5, ttl: 60000 },
-})
+// AI generation is expensive and hits the Gemini quota — keep it tight. This
+// overrides the global "default" limit for this controller only.
+@Throttle({ default: { limit: 5, ttl: 60000 } })
 export class AiController {
   constructor(private readonly aiService: AiService) {}
 

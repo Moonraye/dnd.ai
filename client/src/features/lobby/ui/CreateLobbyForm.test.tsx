@@ -23,7 +23,7 @@ describe('CreateLobbyForm', () => {
     render(<CreateLobbyForm />);
 
     await user.type(screen.getByLabelText(/campaign title/i), 'ab');
-    await user.click(screen.getByRole('button', { name: /create lobby/i }));
+    await user.click(screen.getByRole('button', { name: /create campaign/i }));
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(createLobbyMock).not.toHaveBeenCalled();
@@ -44,7 +44,7 @@ describe('CreateLobbyForm', () => {
       screen.getByLabelText(/campaign title/i),
       'The Sunless Citadel',
     );
-    await user.click(screen.getByRole('button', { name: /create lobby/i }));
+    await user.click(screen.getByRole('button', { name: /create campaign/i }));
 
     expect(createLobbyMock).toHaveBeenCalledWith({
       title: 'The Sunless Citadel',
