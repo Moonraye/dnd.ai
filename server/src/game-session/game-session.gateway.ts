@@ -117,12 +117,15 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
 
       const companions = aiSheets.filter((s) => {
         const nameLower = s.name.toLowerCase();
-        return !nameLower.includes('dm') && !nameLower.includes('dungeon master');
+        return (
+          !nameLower.includes('dm') && !nameLower.includes('dungeon master')
+        );
       });
 
-      const chosenSheet = companions.length > 0
-        ? companions[Math.floor(Math.random() * companions.length)]
-        : aiSheets[Math.floor(Math.random() * aiSheets.length)];
+      const chosenSheet =
+        companions.length > 0
+          ? companions[Math.floor(Math.random() * companions.length)]
+          : aiSheets[Math.floor(Math.random() * aiSheets.length)];
 
       this.aiTurnScheduler.recordUnpromptedCall(sessionId);
 
@@ -143,11 +146,16 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         const requestTimestamps: number[] = [];
         socket.use((packet, next) => {
           const now = Date.now();
-          while (requestTimestamps.length > 0 && requestTimestamps[0] < now - 5000) {
+          while (
+            requestTimestamps.length > 0 &&
+            requestTimestamps[0] < now - 5000
+          ) {
             requestTimestamps.shift();
           }
           if (requestTimestamps.length >= 15) {
-            this.logger.warn(`Socket ${socket.id} throttled: 15 requests per 5s limit exceeded`);
+            this.logger.warn(
+              `Socket ${socket.id} throttled: 15 requests per 5s limit exceeded`,
+            );
             return next(new Error('Rate limit exceeded: too many requests'));
           }
           requestTimestamps.push(now);
@@ -171,19 +179,25 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
           if (exp) {
             const msRemaining = exp * 1000 - Date.now();
             if (msRemaining <= 0) {
-              this.logger.warn(`Recovered socket ${socket.id} has expired token; disconnecting`);
+              this.logger.warn(
+                `Recovered socket ${socket.id} has expired token; disconnecting`,
+              );
               socket.disconnect(true);
               return;
             }
             this.scheduleExpiryDisconnect(socket, token);
           }
         } catch (error) {
-          this.logger.error(`Failed to verify token expiry on recovered socket: ${error instanceof Error ? error.message : error}`);
+          this.logger.error(
+            `Failed to verify token expiry on recovered socket: ${error instanceof Error ? error.message : String(error)}`,
+          );
           socket.disconnect(true);
           return;
         }
       } else {
-        this.logger.warn(`Recovered socket ${socket.id} is missing token; disconnecting`);
+        this.logger.warn(
+          `Recovered socket ${socket.id} is missing token; disconnecting`,
+        );
         socket.disconnect(true);
         return;
       }
@@ -213,7 +227,10 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         user.id,
       );
       if (!isMember) {
-        return { success: false, error: 'You are not a member of this session' };
+        return {
+          success: false,
+          error: 'You are not a member of this session',
+        };
       }
 
       const session = await this.gameSessionService.getSession(
@@ -234,7 +251,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       };
     } catch (error) {
       this.logger.error(
-        `Error joining session ${parsed.data.sessionId}: ${error instanceof Error ? error.stack : error}`,
+        `Error joining session ${parsed.data.sessionId}: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return { success: false, error: 'Session not found' };
     }
@@ -266,7 +283,6 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     let recipientUserId: string | null = null;
     let recipientCharacterId: string | null = null;
     let recipientName: string | null = null;
-    let isTargeted = false;
 
     const senderSheet = await this.characterSheetService.getOwnSheet(
       user.id,
@@ -274,7 +290,6 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     );
 
     if (command && targetId) {
-      isTargeted = true;
       const targetSheet = await this.prisma.characterSheet.findUnique({
         where: { id: targetId },
       });
@@ -310,7 +325,7 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
 
     const senderName = senderSheet
       ? senderSheet.name
-      : user.username ?? user.email ?? 'Player';
+      : (user.username ?? user.email ?? 'Player');
 
     const message = await this.gameSessionService.addChatMessage(
       parsed.data.sessionId,
@@ -336,7 +351,10 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       for (const s of sockets) {
         const socketUser = getSocketUser(s as any);
         if (socketUser && dbMsg) {
-          const payload = this.gameSessionService.toChatPayload(dbMsg, socketUser.id);
+          const payload = this.gameSessionService.toChatPayload(
+            dbMsg,
+            socketUser.id,
+          );
           s.emit(WS_EVENTS.CHAT_MESSAGE, payload);
         }
       }
@@ -357,7 +375,11 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         // Shout triggers target AI and may trigger DM
         this.aiTurnScheduler.requestEvaluation(
           parsed.data.sessionId,
-          () => this.evaluateAiTurns(parsed.data.sessionId, recipientCharacterId || undefined),
+          () =>
+            this.evaluateAiTurns(
+              parsed.data.sessionId,
+              recipientCharacterId || undefined,
+            ),
           { isTargeted: true, targetId: recipientCharacterId || undefined },
         );
 
@@ -381,7 +403,11 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
         // SAY or WHISPER triggers only the target AI
         this.aiTurnScheduler.requestEvaluation(
           parsed.data.sessionId,
-          () => this.evaluateAiTurns(parsed.data.sessionId, recipientCharacterId || undefined),
+          () =>
+            this.evaluateAiTurns(
+              parsed.data.sessionId,
+              recipientCharacterId || undefined,
+            ),
           { isTargeted: true, targetId: recipientCharacterId || undefined },
         );
       }
@@ -490,7 +516,9 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
       // ADR 8: lazily create the Postgres user row on first connection.
       user = await this.userProvisioning.ensureUser(authUser);
     } catch (error) {
-      this.logger.warn(`JWT verification failed for socket ${socket.id}: ${error instanceof Error ? error.stack : error}`);
+      this.logger.warn(
+        `JWT verification failed for socket ${socket.id}: ${error instanceof Error ? error.stack : String(error)}`,
+      );
       throw new Error('Unauthorized');
     }
     (socket.data as SocketData).user = user;
@@ -504,7 +532,9 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
     try {
       exp = decodeJwt(token).exp;
     } catch (error) {
-      this.logger.error(`Failed to decode JWT to schedule expiry disconnect: ${error instanceof Error ? error.message : error}`);
+      this.logger.error(
+        `Failed to decode JWT to schedule expiry disconnect: ${error instanceof Error ? error.message : String(error)}`,
+      );
       return;
     }
     if (!exp) return;
@@ -522,6 +552,9 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
   ): Promise<void> {
     const room = sessionRoom(sessionId);
     try {
+      // The AI DM always answers in the session's own language (chosen once
+      // at lobby creation, immutable thereafter) rather than per-message.
+      const session = await this.gameSessionService.getSession(sessionId);
       await this.aiOrchestrationService.evaluateTurns(
         sessionId,
         async (message, updatedCharacters, stateLog) => {
@@ -534,7 +567,10 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
               for (const s of sockets) {
                 const socketUser = getSocketUser(s as any);
                 if (socketUser) {
-                  const payload = this.gameSessionService.toChatPayload(dbMsg, socketUser.id);
+                  const payload = this.gameSessionService.toChatPayload(
+                    dbMsg,
+                    socketUser.id,
+                  );
                   s.emit(WS_EVENTS.CHAT_MESSAGE, payload);
                 }
               }
@@ -551,11 +587,12 @@ export class GameSessionGateway implements OnGatewayInit, OnGatewayConnection {
           }
         },
         forceAgentId,
+        session.language,
       );
     } catch (error) {
       this.logger.error(
         `AI Orchestration evaluation failed: ${
-          error instanceof Error ? error.stack : error
+          error instanceof Error ? error.stack : String(error)
         }`,
       );
     } finally {

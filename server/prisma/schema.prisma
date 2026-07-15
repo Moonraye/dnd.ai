@@ -46,6 +46,10 @@ model CampaignSession {
   creatorId String        @db.Uuid
   creator   User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
   status    SessionStatus @default(LOBBY)
+  // Chosen once at lobby creation and immutable thereafter (mirrors
+  // packages/shared Language); the AI DM turn always responds in this
+  // language for the whole campaign.
+  language  String        @default("en")
   createdAt DateTime      @default(now())
 
   characterSheets CharacterSheet[]

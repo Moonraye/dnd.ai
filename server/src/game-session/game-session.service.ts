@@ -3,6 +3,7 @@ import type {
   ChatMessagePayload,
   DiceRollMetadata,
   GameStateLogPayload,
+  Language,
   SessionSummary,
   SenderType,
 } from '@dnd/shared';
@@ -29,6 +30,7 @@ export class GameSessionService {
     const session = await this.prisma.campaignSession.create({
       data: {
         title: dto.title,
+        language: dto.language,
         creatorId,
         sessionMembers: {
           create: { userId: creatorId },
@@ -112,7 +114,9 @@ export class GameSessionService {
         senderType: 'SYSTEM',
         senderName,
         messageText,
-        metadata: metadata ? (metadata as unknown as Prisma.InputJsonValue) : Prisma.DbNull,
+        metadata: metadata
+          ? (metadata as unknown as Prisma.InputJsonValue)
+          : Prisma.DbNull,
       },
     });
     return this.toChatPayload(message);
@@ -135,7 +139,9 @@ export class GameSessionService {
       orderBy: { createdAt: since ? 'asc' : 'desc' },
       take: RECENT_MESSAGES_LIMIT,
     });
-    const payloads = messages.map((message) => this.toChatPayload(message, userId));
+    const payloads = messages.map((message) =>
+      this.toChatPayload(message, userId),
+    );
     return since ? payloads : payloads.reverse();
   }
 
@@ -163,6 +169,7 @@ export class GameSessionService {
       creatorId: session.creatorId,
       status: session.status,
       createdAt: session.createdAt.toISOString(),
+      language: session.language as Language,
     };
   }
 
@@ -184,7 +191,8 @@ export class GameSessionService {
       messageText: text,
       metadata: (message.metadata as DiceRollMetadata | null) ?? null,
       visibility: message.visibility,
-      recipientId: message.recipientCharacterId || message.recipientUserId || null,
+      recipientId:
+        message.recipientCharacterId || message.recipientUserId || null,
       recipientName: message.recipientName,
       createdAt: message.createdAt.toISOString(),
     };

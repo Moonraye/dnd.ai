@@ -66,6 +66,7 @@ describe('GameSessionGateway', () => {
     creatorId: 'user-uuid',
     status: 'LOBBY',
     createdAt: '2026-07-10T12:00:00.000Z',
+    language: 'en',
   };
   const room = `session:${summary.id}`;
 
@@ -215,7 +216,12 @@ describe('GameSessionGateway', () => {
       expect(getStateLog).toHaveBeenCalledWith(summary.id);
       expect(result).toEqual({
         success: true,
-        data: { session: summary, messages: [], characters: [], stateLog: null },
+        data: {
+          session: summary,
+          messages: [],
+          characters: [],
+          stateLog: null,
+        },
       });
     });
 
