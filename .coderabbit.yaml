@@ -11,4 +11,4 @@ reviews:
     - "!.agents"
     - "!.claude"
     - "!dist/**"
-    - "src/**"
+    - "**/src/**"
