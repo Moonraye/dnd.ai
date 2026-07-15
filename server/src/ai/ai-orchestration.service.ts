@@ -677,44 +677,63 @@ Task: Respond as the participant named "${agentSheet.name}".${
     }
 
     // 10. Broadcast narrative chat, HUD state updates, and campaign memory.
-    // Awaited so the narrative message reaches clients before its roll cards
-    // and a rejected broadcast surfaces instead of becoming an unhandled
-    // rejection.
-    await onBroadcast(
-      {
-        id: createdMsg.id,
-        sessionId: createdMsg.sessionId,
-        senderType: createdMsg.senderType,
-        senderName: createdMsg.senderName,
-        messageText: createdMsg.messageText,
-        createdAt: createdMsg.createdAt.toISOString(),
-        visibility: createdMsg.visibility,
-        recipientId:
-          createdMsg.recipientCharacterId || createdMsg.recipientUserId || null,
-        recipientName: createdMsg.recipientName,
-      },
-      updatedCharacters,
-      stateLogPayload,
-    );
+    // Awaited sequentially so the narrative message reaches clients before
+    // its roll cards. Every message here is already persisted, so one failed
+    // delivery must not abort the rest: each broadcast is attempted, and
+    // collected failures are rethrown only after all attempts complete.
+    const broadcastErrors: unknown[] = [];
+    try {
+      await onBroadcast(
+        {
+          id: createdMsg.id,
+          sessionId: createdMsg.sessionId,
+          senderType: createdMsg.senderType,
+          senderName: createdMsg.senderName,
+          messageText: createdMsg.messageText,
+          createdAt: createdMsg.createdAt.toISOString(),
+          visibility: createdMsg.visibility,
+          recipientId:
+            createdMsg.recipientCharacterId ||
+            createdMsg.recipientUserId ||
+            null,
+          recipientName: createdMsg.recipientName,
+        },
+        updatedCharacters,
+        stateLogPayload,
+      );
+    } catch (error) {
+      broadcastErrors.push(error);
+    }
 
     // Broadcast rolled cards as separate events
     for (const rollMsg of rolledMessages) {
-      await onBroadcast(
-        {
-          id: rollMsg.id,
-          sessionId: rollMsg.sessionId,
-          senderType: rollMsg.senderType,
-          senderName: rollMsg.senderName,
-          messageText: rollMsg.messageText,
-          createdAt: rollMsg.createdAt.toISOString(),
-          visibility: rollMsg.visibility,
-          metadata: rollMsg.metadata as unknown as DiceRollMetadata | null,
-          recipientId:
-            rollMsg.recipientCharacterId || rollMsg.recipientUserId || null,
-          recipientName: rollMsg.recipientName,
-        },
-        [],
-        null,
+      try {
+        await onBroadcast(
+          {
+            id: rollMsg.id,
+            sessionId: rollMsg.sessionId,
+            senderType: rollMsg.senderType,
+            senderName: rollMsg.senderName,
+            messageText: rollMsg.messageText,
+            createdAt: rollMsg.createdAt.toISOString(),
+            visibility: rollMsg.visibility,
+            metadata: rollMsg.metadata as unknown as DiceRollMetadata | null,
+            recipientId:
+              rollMsg.recipientCharacterId || rollMsg.recipientUserId || null,
+            recipientName: rollMsg.recipientName,
+          },
+          [],
+          null,
+        );
+      } catch (error) {
+        broadcastErrors.push(error);
+      }
+    }
+
+    if (broadcastErrors.length > 0) {
+      throw new AggregateError(
+        broadcastErrors,
+        'One or more AI turn broadcasts failed',
       );
     }
   }
