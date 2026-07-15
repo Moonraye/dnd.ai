@@ -3,6 +3,7 @@
 import type { ChatMessagePayload } from '@dnd/shared';
 import { useEffect, useRef, memo } from 'react';
 import { DiceRollCard } from '@/entities/dice';
+import { format, useTranslation, type Dictionary } from '@/shared/i18n';
 import { useSessionStore } from '@/shared/store/sessionStore';
 
 interface ChatWindowProps {
@@ -18,8 +19,10 @@ function formatTime(iso: string): string {
 
 const MessageRow = memo(function MessageRow({
   message,
+  t,
 }: {
   message: ChatMessagePayload;
+  t: Dictionary;
 }) {
   // Dice rolls — the indigo result card.
   if (
@@ -54,12 +57,12 @@ const MessageRow = memo(function MessageRow({
             </span>
             {message.senderType === 'AI_PLAYER' && (
               <span className="rounded-full bg-primary-subtle px-1.5 py-px text-[0.6rem] font-semibold uppercase tracking-wide text-primary">
-                AI
+                {t.common.badges.ai}
               </span>
             )}
             {isDm && (
               <span className="rounded-full bg-accent-subtle px-1.5 py-px text-[0.6rem] font-semibold uppercase tracking-wide text-accent">
-                DM
+                {t.common.badges.dm}
               </span>
             )}
             <span className="flex items-center gap-1 text-[10px] text-fg-subtle font-medium">
@@ -75,7 +78,11 @@ const MessageRow = memo(function MessageRow({
                   clipRule="evenodd"
                 />
               </svg>
-              <span>whispered to {message.recipientName || 'someone'}</span>
+              <span>
+                {format(t.chat.whisperedTo, {
+                  name: message.recipientName || t.chat.someone,
+                })}
+              </span>
             </span>
           </div>
           <time dateTime={message.createdAt} className="font-mono text-[10px] text-fg-subtle">
@@ -114,7 +121,7 @@ const MessageRow = memo(function MessageRow({
         </span>
         {isAi ? (
           <span className="rounded-full bg-primary-subtle px-1.5 py-px text-[0.6rem] font-semibold uppercase tracking-wide text-primary">
-            AI
+            {t.common.badges.ai}
           </span>
         ) : null}
         <time dateTime={message.createdAt} className="font-mono text-xs text-fg-subtle">
@@ -131,10 +138,11 @@ const MessageRow = memo(function MessageRow({
 export const ChatWindow = memo(function ChatWindow({
   messages,
 }: ChatWindowProps) {
+  const { t } = useTranslation();
   const bottomRef = useRef<HTMLDivElement>(null);
   const prevCountRef = useRef(messages.length);
   const characters = useSessionStore((state) => state.characters);
-  
+
   const thinkingCharacters = characters.filter((c) => c.thinking);
 
   useEffect(() => {
@@ -157,11 +165,11 @@ export const ChatWindow = memo(function ChatWindow({
     >
       {messages.length === 0 ? (
         <p className="m-auto max-w-sm text-center font-display text-lg text-fg-muted">
-          The tavern is quiet. Your dungeon master is waiting for you to speak.
+          {t.chat.emptyState}
         </p>
       ) : (
         messages.map((message) => (
-          <MessageRow key={message.id} message={message} />
+          <MessageRow key={message.id} message={message} t={t} />
         ))
       )}
 
@@ -173,7 +181,7 @@ export const ChatWindow = memo(function ChatWindow({
             <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
           </span>
           <span className="text-xs italic text-fg-muted font-medium font-serif">
-            {char.name} is formulating a response...
+            {format(t.chat.formulatingResponse, { name: char.name })}
           </span>
         </div>
       ))}

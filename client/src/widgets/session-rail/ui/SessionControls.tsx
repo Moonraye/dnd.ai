@@ -3,6 +3,7 @@
 import { countSessionRoles, MAX_PLAYERS_PER_SESSION } from '@dnd/shared';
 import { useState } from 'react';
 import { apiFetch } from '@/shared/api/httpClient';
+import { format, pluralize, useTranslation } from '@/shared/i18n';
 import { useSessionStore } from '@/shared/store/sessionStore';
 import { Button } from '@/shared/ui';
 import { CreateCompanionDialog } from '@/features/companion-management';
@@ -29,6 +30,7 @@ const AI_DM_BODY = {
 };
 
 export function SessionControls({ sessionId }: { sessionId: string }) {
+  const { t, language } = useTranslation();
   const characters = useSessionStore((state) => state.characters);
   const [isAdding, setIsAdding] = useState(false);
   const [isCustomOpen, setIsCustomOpen] = useState(false);
@@ -55,7 +57,7 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
       await postCharacter(AI_DM_BODY);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : 'Failed to summon the dungeon master',
+        err instanceof Error ? err.message : t.errors.summonDmFailed,
       );
     } finally {
       setIsAdding(false);
@@ -76,7 +78,7 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
       }
       setCount(1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to summon AI players');
+      setError(err instanceof Error ? err.message : t.errors.summonPlayersFailed);
     } finally {
       setIsAdding(false);
     }
@@ -88,7 +90,7 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
   return (
     <div className="flex flex-col gap-3">
       <span className="font-mono text-xs uppercase tracking-[0.18em] text-fg-subtle">
-        Summon
+        {t.sessionRail.summonHeading}
       </span>
 
       <Button
@@ -97,18 +99,18 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
         className="w-full"
         onClick={addAiDm}
         disabled={isAdding || dmExists}
-        title={dmExists ? 'This table already has a dungeon master' : undefined}
+        title={dmExists ? t.sessionRail.dmExistsTitle : undefined}
       >
-        Summon AI dungeon master
+        {t.sessionRail.summonDm}
       </Button>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-xs text-fg-muted">AI players to add</span>
+          <span className="text-xs text-fg-muted">{t.sessionRail.aiPlayersToAdd}</span>
           <div className="flex items-center gap-2">
             <button
               type="button"
-              aria-label="Fewer players"
+              aria-label={t.sessionRail.fewerPlayers}
               className={stepperBtn}
               onClick={() => setCount((c) => Math.max(1, c - 1))}
               disabled={isAdding || toAdd <= 1}
@@ -120,7 +122,7 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
             </span>
             <button
               type="button"
-              aria-label="More players"
+              aria-label={t.sessionRail.morePlayers}
               className={stepperBtn}
               onClick={() => setCount((c) => Math.min(remaining, c + 1))}
               disabled={isAdding || toAdd >= remaining}
@@ -135,11 +137,17 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
           className="w-full"
           onClick={addAiPlayers}
           disabled={isAdding || partyFull}
-          title={partyFull ? `Party is full (max ${MAX_PLAYERS_PER_SESSION})` : undefined}
+          title={
+            partyFull
+              ? format(t.sessionRail.partyFull, { max: MAX_PLAYERS_PER_SESSION })
+              : undefined
+          }
         >
           {isAdding
-            ? 'Summoning…'
-            : `Summon ${toAdd} AI player${toAdd === 1 ? '' : 's'}`}
+            ? t.sessionRail.summoning
+            : format(t.sessionRail.summonPlayers[pluralize(language, toAdd)], {
+                n: toAdd,
+              })}
         </Button>
 
         <Button
@@ -148,15 +156,20 @@ export function SessionControls({ sessionId }: { sessionId: string }) {
           className="w-full text-xs"
           onClick={() => setIsCustomOpen(true)}
           disabled={isAdding || partyFull}
-          title={partyFull ? `Party is full (max ${MAX_PLAYERS_PER_SESSION})` : undefined}
+          title={
+            partyFull
+              ? format(t.sessionRail.partyFull, { max: MAX_PLAYERS_PER_SESSION })
+              : undefined
+          }
         >
-          Create Custom Companion
+          {t.sessionRail.createCustomCompanion}
         </Button>
       </div>
 
       <p className="text-xs text-fg-subtle">
-        {players}/{MAX_PLAYERS_PER_SESSION} players
-        {dmExists ? ' · DM present' : ' · no DM yet'}
+        {format(t.sessionRail.playersCount, { count: players, max: MAX_PLAYERS_PER_SESSION })}
+        {' · '}
+        {dmExists ? t.sessionRail.dmPresent : t.sessionRail.noDmYet}
       </p>
       {error ? (
         <p role="alert" className="text-xs text-danger">

@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { getSupabaseClient } from '@/shared/api/supabaseClient';
+import { useTranslation } from '@/shared/i18n';
 
 /**
  * OAuth landing route. The Supabase browser client parses the auth response
@@ -11,6 +12,7 @@ import { getSupabaseClient } from '@/shared/api/supabaseClient';
  */
 export default function AuthCallbackPage() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   useEffect(() => {
     const client = getSupabaseClient();
@@ -50,10 +52,8 @@ export default function AuthCallbackPage() {
 
   return (
     <main className="flex min-h-dvh flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-      <p className="font-display text-2xl text-fg">Signing you in…</p>
-      <p className="text-sm text-fg-muted">
-        One moment while we open the tavern doors.
-      </p>
+      <p className="font-display text-2xl text-fg">{t.auth.callback.title}</p>
+      <p className="text-sm text-fg-muted">{t.auth.callback.subtitle}</p>
     </main>
   );
 }

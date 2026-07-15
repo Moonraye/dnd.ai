@@ -21,6 +21,33 @@ describe('CreateLobbySchema', () => {
     const result = CreateLobbySchema.safeParse({ title: 'ab' });
     expect(result.success).toBe(false);
   });
+
+  it('defaults language to "en" when not provided', () => {
+    const result = CreateLobbySchema.safeParse({ title: 'The Sunken Crypt' });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.language).toBe('en');
+    }
+  });
+
+  it('accepts an explicit supported language', () => {
+    const result = CreateLobbySchema.safeParse({
+      title: 'The Sunken Crypt',
+      language: 'uk',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.language).toBe('uk');
+    }
+  });
+
+  it('rejects an unsupported language code', () => {
+    const result = CreateLobbySchema.safeParse({
+      title: 'The Sunken Crypt',
+      language: 'fr',
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe('CharacterSheetSchema', () => {
@@ -92,5 +119,19 @@ describe('SendChatMessageSchema', () => {
       messageText: '',
     });
     expect(result.success).toBe(false);
+  });
+
+  // Language is no longer a per-message field: it is chosen once at lobby
+  // creation (see CreateLobbySchema) and applies to the whole campaign.
+  it('does not accept a language field', () => {
+    const result = SendChatMessageSchema.safeParse({
+      sessionId: 'a3bb189e-8bf9-3888-9912-ace4e6543002',
+      messageText: 'hello',
+      language: 'uk',
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data).not.toHaveProperty('language');
+    }
   });
 });

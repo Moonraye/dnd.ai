@@ -63,3 +63,17 @@ cleaner than just doing it in this session?" If no — don't delegate.
 4. Give each worker a self-contained prompt — file paths, constraints.
 5. If a result looks off, send it back with specific feedback.
 6. Report each worker's outcome in 1-3 sentences, not full transcripts.
+
+### Effort calibration
+
+Before delegating, classify the task:
+
+- **low** — single-file change, config tweak, copy fix, obvious bug fix
+- **medium** — feature touching 2-4 files within one layer (client OR server)
+- **high** — cross-layer feature, schema changes, anything with non-obvious edge cases
+
+Include the effort level explicitly in the worker's delegation prompt, e.g.
+"Effort: low — this is a small config change." Workers should scale their
+depth of reasoning and verification accordingly: low effort means implement
+directly with minimal exploration; high effort means explore thoroughly,
+consider edge cases, and verify carefully before finishing.

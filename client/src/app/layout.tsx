@@ -1,12 +1,15 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Cormorant_Garamond } from "next/font/google";
+import { Inter, Geist_Mono, Cormorant_Garamond } from "next/font/google";
 import { AuthProvider } from "@/features/auth";
 import { ThemeProvider, themeInitScript } from "@/features/theme";
+import { LanguageProvider } from "@/shared/i18n";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
+// Body face — Cyrillic-capable so Ukrainian copy renders without a fallback
+// font swap.
+const sansFace = Inter({
+  variable: "--font-sans-face",
+  subsets: ["latin", "cyrillic"],
 });
 
 const geistMono = Geist_Mono({
@@ -18,7 +21,7 @@ const geistMono = Geist_Mono({
 // headings, logo, and titles. Deliberately not the cliché "fantasy" font.
 const cormorant = Cormorant_Garamond({
   variable: "--font-display-face",
-  subsets: ["latin"],
+  subsets: ["latin", "cyrillic"],
   weight: ["500", "600", "700"],
   display: "swap",
 });
@@ -37,12 +40,14 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} h-full antialiased`}
+      className={`${sansFace.variable} ${geistMono.variable} ${cormorant.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
+          <LanguageProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

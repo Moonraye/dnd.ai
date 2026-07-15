@@ -7,6 +7,7 @@ import {
   parseDiceNotation,
 } from '@dnd/shared';
 import { useState } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { Button, Input } from '@/shared/ui';
 import { cn } from '@/shared/lib/cn';
 import { useRollDice } from '../model/useRollDice';
@@ -20,6 +21,7 @@ export function DiceRollerPanel({
   sessionId,
   disabled = false,
 }: DiceRollerPanelProps) {
+  const { t } = useTranslation();
   const { roll, isRolling, error } = useRollDice(sessionId);
   // String state so a cleared field stays empty while the user retypes;
   // parseable values are clamped to the shared grammar's limits so typed
@@ -70,9 +72,9 @@ export function DiceRollerPanel({
       </div>
       <div className="flex items-end gap-3">
         <label className="flex flex-col gap-1 text-xs text-fg-muted">
-          <span className="font-medium">Count</span>
+          <span className="font-medium">{t.dice.count}</span>
           <Input
-            aria-label="Dice count"
+            aria-label={t.dice.diceCount}
             type="number"
             min={1}
             max={MAX_DICE}
@@ -85,9 +87,9 @@ export function DiceRollerPanel({
           />
         </label>
         <label className="flex flex-col gap-1 text-xs text-fg-muted">
-          <span className="font-medium">Modifier</span>
+          <span className="font-medium">{t.dice.modifier}</span>
           <Input
-            aria-label="Modifier"
+            aria-label={t.dice.modifier}
             type="number"
             min={-MAX_CONSTANT}
             max={MAX_CONSTANT}
@@ -110,7 +112,7 @@ export function DiceRollerPanel({
           disabled={!canRoll}
           className="bg-dice text-white hover:bg-dice hover:opacity-90"
         >
-          {isRolling ? 'Rolling…' : 'Roll'}
+          {isRolling ? t.dice.rolling : t.dice.roll}
         </Button>
       </div>
       {error ? (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { signInWithGoogle } from '../api/authApi';
 
 function GoogleIcon() {
@@ -27,6 +28,7 @@ function GoogleIcon() {
 }
 
 export function GoogleSignInButton() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,8 +38,11 @@ export function GoogleSignInButton() {
     try {
       // On success the browser is redirected to Google and never comes back here.
       await signInWithGoogle();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Google sign-in failed');
+    } catch {
+      // Supabase `AuthError` messages are raw, untranslated, provider text
+      // with no stable set of error codes to map — always show the generic,
+      // translated error instead of leaking them to the user.
+      setError(t.auth.google.genericError);
       setIsLoading(false);
     }
   };
@@ -51,7 +56,7 @@ export function GoogleSignInButton() {
         className="inline-flex h-11 w-full items-center justify-center gap-3 rounded-md border border-border-strong bg-surface px-4 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle disabled:opacity-50"
       >
         <GoogleIcon />
-        {isLoading ? 'Redirecting to Google…' : 'Continue with Google'}
+        {isLoading ? t.auth.google.redirecting : t.auth.google.continueWithGoogle}
       </button>
       {error ? (
         <p role="alert" className="text-sm text-danger">

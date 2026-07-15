@@ -11,6 +11,7 @@ import {
   Textarea,
 } from '@/shared/ui';
 import { apiFetch } from '@/shared/api/httpClient';
+import { format, useTranslation } from '@/shared/i18n';
 import type { CharacterSheetPayload } from '@dnd/shared';
 
 interface EditCompanionDialogProps {
@@ -26,6 +27,7 @@ export function EditCompanionDialog({
   sessionId,
   character,
 }: EditCompanionDialogProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [persona, setPersona] = useState('');
   const [hpMax, setHpMax] = useState(30);
@@ -43,6 +45,8 @@ export function EditCompanionDialog({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // Syncs local form fields from the character prop when the dialog opens.
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (character) {
       setName(character.name);
       setPersona(character.persona || '');
@@ -58,6 +62,7 @@ export function EditCompanionDialog({
       });
       setError(null);
     }
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [character, isOpen]);
 
   if (!character) return null;
@@ -75,11 +80,11 @@ export function EditCompanionDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t.companions.nameRequired);
       return;
     }
     if (hpCurrent > hpMax) {
-      setError('Current HP cannot exceed Max HP');
+      setError(t.companions.hpExceedsMax);
       return;
     }
     setIsSubmitting(true);
@@ -98,14 +103,16 @@ export function EditCompanionDialog({
       });
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to update companion');
+      setError(err instanceof Error ? err.message : t.errors.updateCompanionFailed);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    const confirmed = window.confirm(`Are you sure you want to dismiss ${character.name}?`);
+    const confirmed = window.confirm(
+      format(t.companions.confirmDismiss, { name: character.name }),
+    );
     if (!confirmed) return;
 
     setIsDeleting(true);
@@ -117,7 +124,7 @@ export function EditCompanionDialog({
       });
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to dismiss companion');
+      setError(err instanceof Error ? err.message : t.errors.dismissCompanionFailed);
     } finally {
       setIsDeleting(false);
     }
@@ -126,19 +133,19 @@ export function EditCompanionDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogTitle>Edit Companion Profile</DialogTitle>
+        <DialogTitle>{t.companions.editTitle}</DialogTitle>
         <DialogDescription>
-          Customize attributes, behavioral persona, and hit points.
+          {t.companions.editDescription}
         </DialogDescription>
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-name" className="text-xs font-medium text-fg-muted">
-              Companion Name
+              {t.companions.nameLabel}
             </label>
             <Input
               id="edit-name"
               type="text"
-              placeholder="e.g. Thorin Oakenshield"
+              placeholder={t.companions.namePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -147,11 +154,11 @@ export function EditCompanionDialog({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="edit-persona" className="text-xs font-medium text-fg-muted">
-              Behavioral Persona
+              {t.companions.personaLabel}
             </label>
             <Textarea
               id="edit-persona"
-              placeholder="Describe their voice, temperament, backstory... (e.g. A proud dwarf who speaks in grumbles.)"
+              placeholder={t.companions.personaPlaceholderEdit}
               value={persona}
               onChange={(e) => setPersona(e.target.value)}
               rows={3}
@@ -161,7 +168,7 @@ export function EditCompanionDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="edit-hp-current" className="text-xs font-medium text-fg-muted">
-                Current HP
+                {t.companions.currentHp}
               </label>
               <Input
                 id="edit-hp-current"
@@ -178,7 +185,7 @@ export function EditCompanionDialog({
             </div>
             <div className="flex flex-col gap-1.5">
               <label htmlFor="edit-hp-max" className="text-xs font-medium text-fg-muted">
-                Max HP
+                {t.companions.maxHp}
               </label>
               <Input
                 id="edit-hp-max"
@@ -196,7 +203,7 @@ export function EditCompanionDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-fg-muted">Ability Scores</span>
+            <span className="text-xs font-medium text-fg-muted">{t.companions.abilityScores}</span>
             <div className="grid grid-cols-6 gap-2">
               {(Object.keys(stats) as Array<keyof typeof stats>).map((stat) => (
                 <div key={stat} className="flex flex-col items-center gap-1">
@@ -231,7 +238,7 @@ export function EditCompanionDialog({
               onClick={handleDelete}
               disabled={isDeleting || isSubmitting}
             >
-              {isDeleting ? 'Dismissing…' : 'Dismiss'}
+              {isDeleting ? t.companions.dismissing : t.companions.dismiss}
             </Button>
             <div className="flex gap-2">
               <Button
@@ -240,10 +247,10 @@ export function EditCompanionDialog({
                 onClick={() => onOpenChange(false)}
                 disabled={isSubmitting || isDeleting}
               >
-                Cancel
+                {t.companions.cancel}
               </Button>
               <Button type="submit" disabled={isSubmitting || isDeleting}>
-                {isSubmitting ? 'Saving…' : 'Save Changes'}
+                {isSubmitting ? t.companions.saving : t.companions.saveChanges}
               </Button>
             </div>
           </div>

@@ -5,9 +5,11 @@ import {
   type AiStateUpdate,
   type ChatMessagePayload,
   type CharacterSheetPayload,
+  type DiceRollMetadata,
   type GameStateLogPayload,
   type InventoryItem,
   type KeyFact,
+  type Language,
 } from '@dnd/shared';
 import { type GoogleGenAI, type Schema, Type } from '@google/genai';
 import { GENAI_CLIENT } from './genai.provider';
@@ -73,13 +75,35 @@ function mergeKeyFacts(
   return { facts: merged.slice(overflow), evicted: merged.slice(0, overflow) };
 }
 
-const SYSTEM_INSTRUCTIONS = `You are a real-time Dungeons & Dragons 5e AI Orchestrator and Dungeon Master.
+// Human-readable names for the LANGUAGE paragraph below.
+const LANGUAGE_NAMES: Record<Language, string> = {
+  en: 'English',
+  uk: 'Ukrainian',
+};
 
-LANGUAGE. Understand players no matter what language they write in. Detect the language of
-the MOST RECENT player message and write your entire response — narration, dialogue, and
-every "stateUpdate" string ("campaignSummary", "keyFacts", quest and NPC text) — in that
-SAME language. If players switch languages, switch with them. Keep proper nouns (character,
-place, and item names) as originally given.
+/**
+ * The session's language (chosen once at lobby creation, immutable
+ * thereafter) pins the response language for the whole turn, regardless of
+ * what language players type in chat.
+ */
+function buildLanguageParagraph(language: Language): string {
+  // The column is an unconstrained String in Prisma; guard against a bad
+  // value ever reaching the prompt via a future write path or manual edit.
+  const name = LANGUAGE_NAMES[language] ?? LANGUAGE_NAMES.en;
+  return `LANGUAGE. This campaign's language is ${name}. Understand players no matter what
+language they write in, but write your ENTIRE response — narration, dialogue, and every
+"stateUpdate" string ("campaignSummary", "keyFacts", quest and NPC text) — in ${name},
+regardless of what language players write in the chat. Keep proper nouns (character, place,
+and item names) as originally given.`;
+}
+
+/** Assembles the system prompt, pinned to the session's language. */
+function buildSystemInstructions(language: Language): string {
+  const languageParagraph = buildLanguageParagraph(language);
+
+  return `You are a real-time Dungeons & Dragons 5e AI Orchestrator and Dungeon Master.
+
+${languageParagraph}
 
 CANON IS INVIOLABLE. The "Established Canon" (key facts) and "Story So Far" given to you
 are the immutable truth of this campaign. Never contradict them: a character stated dead
@@ -113,6 +137,7 @@ Respond by filling the provided JSON schema:
   - "inventoryChanges": array of { "characterName", "item", "qty" } to add/remove items (negative qty removes).
 Always include "stateUpdate" with at least a one-sentence "campaignSummary". Include the
 other fields only when that state actually changed this turn.`;
+}
 
 // Constrains Gemini to type-correct JSON. `npcRelationships` is modelled as an
 // array of {name,status} because the OpenAPI-subset schema can't express a
@@ -275,8 +300,12 @@ export class AiOrchestrationService {
       message: ChatMessagePayload,
       updatedCharacters: CharacterSheetPayload[],
       stateLog: GameStateLogPayload | null,
-    ) => void,
+    ) => void | Promise<void>,
     forceAgentId?: string,
+    // The session's language (chosen once at lobby creation, immutable
+    // thereafter). Every session has one (defaults to 'en' in the DB), so
+    // the caller always resolves and passes it explicitly.
+    language: Language = 'en',
   ): Promise<void> {
     // 1. Fetch AI participants in this session
     const aiSheets = await this.prisma.characterSheet.findMany({
@@ -381,8 +410,8 @@ export class AiOrchestrationService {
         let text = m.messageText;
         if (m.visibility === 'WHISPER') {
           const isParticipant =
-            m.senderCharacterId === agentSheet!.id ||
-            m.recipientCharacterId === agentSheet!.id;
+            m.senderCharacterId === agentSheet.id ||
+            m.recipientCharacterId === agentSheet.id;
           if (!isParticipant) {
             text = `${m.senderName} whispers to ${m.recipientName ?? 'someone'}...`;
           }
@@ -436,7 +465,7 @@ Task: Respond as the participant named "${agentSheet.name}".${
             },
           ],
           config: {
-            systemInstruction: SYSTEM_INSTRUCTIONS,
+            systemInstruction: buildSystemInstructions(language),
             responseMimeType: 'application/json',
             responseSchema: AI_RESPONSE_SCHEMA,
             // Disable Gemini 2.5 Flash "thinking" so its tokens don't consume
@@ -513,7 +542,7 @@ Task: Respond as the participant named "${agentSheet.name}".${
     });
 
     // Execute AI-initiated dice rolls
-    const rolledMessages: any[] = [];
+    const rolledMessages: ChatMessage[] = [];
     if (data.diceRolls && data.diceRolls.length > 0) {
       for (const roll of data.diceRolls) {
         try {
@@ -528,7 +557,7 @@ Task: Respond as the participant named "${agentSheet.name}".${
               senderName: roll.characterName,
               messageText: rollResult.messageText,
               visibility: 'PUBLIC',
-              metadata: rollResult.metadata as any,
+              metadata: rollResult.metadata as unknown as Prisma.InputJsonValue,
             },
           });
           rolledMessages.push(rollMsg);
@@ -648,41 +677,63 @@ Task: Respond as the participant named "${agentSheet.name}".${
     }
 
     // 10. Broadcast narrative chat, HUD state updates, and campaign memory.
-    onBroadcast(
-      {
-        id: createdMsg.id,
-        sessionId: createdMsg.sessionId,
-        senderType: createdMsg.senderType,
-        senderName: createdMsg.senderName,
-        messageText: createdMsg.messageText,
-        createdAt: createdMsg.createdAt.toISOString(),
-        visibility: createdMsg.visibility,
-        recipientId:
-          createdMsg.recipientCharacterId || createdMsg.recipientUserId || null,
-        recipientName: createdMsg.recipientName,
-      },
-      updatedCharacters,
-      stateLogPayload,
-    );
+    // Awaited sequentially so the narrative message reaches clients before
+    // its roll cards. Every message here is already persisted, so one failed
+    // delivery must not abort the rest: each broadcast is attempted, and
+    // collected failures are rethrown only after all attempts complete.
+    const broadcastErrors: unknown[] = [];
+    try {
+      await onBroadcast(
+        {
+          id: createdMsg.id,
+          sessionId: createdMsg.sessionId,
+          senderType: createdMsg.senderType,
+          senderName: createdMsg.senderName,
+          messageText: createdMsg.messageText,
+          createdAt: createdMsg.createdAt.toISOString(),
+          visibility: createdMsg.visibility,
+          recipientId:
+            createdMsg.recipientCharacterId ||
+            createdMsg.recipientUserId ||
+            null,
+          recipientName: createdMsg.recipientName,
+        },
+        updatedCharacters,
+        stateLogPayload,
+      );
+    } catch (error) {
+      broadcastErrors.push(error);
+    }
 
     // Broadcast rolled cards as separate events
     for (const rollMsg of rolledMessages) {
-      onBroadcast(
-        {
-          id: rollMsg.id,
-          sessionId: rollMsg.sessionId,
-          senderType: rollMsg.senderType,
-          senderName: rollMsg.senderName,
-          messageText: rollMsg.messageText,
-          createdAt: rollMsg.createdAt.toISOString(),
-          visibility: rollMsg.visibility,
-          metadata: rollMsg.metadata as any,
-          recipientId:
-            rollMsg.recipientCharacterId || rollMsg.recipientUserId || null,
-          recipientName: rollMsg.recipientName,
-        },
-        [],
-        null,
+      try {
+        await onBroadcast(
+          {
+            id: rollMsg.id,
+            sessionId: rollMsg.sessionId,
+            senderType: rollMsg.senderType,
+            senderName: rollMsg.senderName,
+            messageText: rollMsg.messageText,
+            createdAt: rollMsg.createdAt.toISOString(),
+            visibility: rollMsg.visibility,
+            metadata: rollMsg.metadata as unknown as DiceRollMetadata | null,
+            recipientId:
+              rollMsg.recipientCharacterId || rollMsg.recipientUserId || null,
+            recipientName: rollMsg.recipientName,
+          },
+          [],
+          null,
+        );
+      } catch (error) {
+        broadcastErrors.push(error);
+      }
+    }
+
+    if (broadcastErrors.length > 0) {
+      throw new AggregateError(
+        broadcastErrors,
+        'One or more AI turn broadcasts failed',
       );
     }
   }

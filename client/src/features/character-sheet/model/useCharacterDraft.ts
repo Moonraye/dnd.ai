@@ -2,6 +2,7 @@
 
 import type { CharacterSheetInput } from '@dnd/shared';
 import { useCallback, useState } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { generateCharacterDraft } from '../api/characterApi';
 
 /**
@@ -9,6 +10,7 @@ import { generateCharacterDraft } from '../api/characterApi';
  * creation form — saving still goes through the normal manual path.
  */
 export function useCharacterDraft() {
+  const { t } = useTranslation();
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,14 +22,14 @@ export function useCharacterDraft() {
         return await generateCharacterDraft({ prompt });
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : 'AI draft failed — try again',
+          err instanceof Error ? err.message : t.errors.draftFailed,
         );
         return null;
       } finally {
         setIsGenerating(false);
       }
     },
-    [],
+    [t],
   );
 
   return { generate, isGenerating, error };

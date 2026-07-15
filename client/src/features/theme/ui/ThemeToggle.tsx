@@ -1,18 +1,21 @@
 'use client';
 
+import { useTranslation } from '@/shared/i18n';
 import { useTheme } from './ThemeProvider';
 
 /** Sun/moon toggle for the arcane light/dark themes. */
 export function ThemeToggle() {
   const { theme, toggle } = useTheme();
+  const { t } = useTranslation();
   const isDark = theme === 'dark';
+  const label = isDark ? t.common.theme.switchToLight : t.common.theme.switchToDark;
 
   return (
     <button
       type="button"
       onClick={toggle}
-      aria-label={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
-      title={isDark ? 'Switch to light theme' : 'Switch to dark theme'}
+      aria-label={label}
+      title={label}
       className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-border text-fg-muted transition-colors hover:border-border-strong hover:text-fg"
     >
       {isDark ? (

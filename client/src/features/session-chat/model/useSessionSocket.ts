@@ -11,6 +11,7 @@ import {
 import { useState, useEffect } from 'react';
 import { getSocket } from '@/shared/api/socketClient';
 import { useSessionStore } from '@/shared/store/sessionStore';
+import { JOIN_ERROR_KEYS } from './resolveJoinError';
 
 const JOIN_ACK_TIMEOUT_MS = 5000;
 
@@ -68,7 +69,7 @@ export function useSessionSocket(sessionId: string) {
         store.getState().setJoinStatus('joined');
       } catch {
         if (!cancelled) {
-          store.getState().setJoinStatus('error', 'Connection timed out');
+          store.getState().setJoinStatus('error', JOIN_ERROR_KEYS.connectionTimedOut);
         }
       } finally {
         isJoining = false;
@@ -88,7 +89,7 @@ export function useSessionSocket(sessionId: string) {
       store.getState().setCharacterThinking(payload.characterId, payload.thinking);
     const onDisconnect = () => store.getState().setJoinStatus('connecting');
     const onConnectError = () =>
-      store.getState().setJoinStatus('error', 'Unable to connect');
+      store.getState().setJoinStatus('error', JOIN_ERROR_KEYS.unableToConnect);
 
     socket.on('connect', onConnect);
     socket.on(WS_EVENTS.CHAT_MESSAGE, onChatMessage);

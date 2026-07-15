@@ -4,8 +4,19 @@ import { z } from 'zod';
 export const SessionStatusSchema = z.enum(['LOBBY', 'ACTIVE', 'COMPLETED']);
 export const SenderTypeSchema = z.enum(['HUMAN', 'AI_DM', 'AI_PLAYER', 'SYSTEM']);
 
+/**
+ * UI language chosen once at campaign/lobby creation and immutable
+ * thereafter. The AI DM must respond entirely in this language for the
+ * whole session, regardless of what language players write in.
+ */
+export const LanguageSchema = z.enum(['en', 'uk']);
+export type Language = z.infer<typeof LanguageSchema>;
+
 export const CreateLobbySchema = z.object({
   title: z.string().min(3).max(80),
+  // Chosen once at creation and immutable thereafter — the whole campaign
+  // (including every AI DM turn) runs in this language.
+  language: LanguageSchema.default('en'),
 });
 
 export const AbilityScoresSchema = z.object({

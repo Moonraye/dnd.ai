@@ -4,6 +4,11 @@ import type { PrismaService } from '../prisma/prisma.service';
 import type { CharacterSheetService } from '../user/character-sheet.service';
 import type { DiceService } from '../game-session/dice.service';
 
+/** Extracts the first argument of a jest mock's first call, cast to `T`. */
+function firstCallArg<T>(mock: jest.Mock): T {
+  return (mock.mock.calls as unknown as Array<[T]>)[0][0];
+}
+
 describe('AiOrchestrationService', () => {
   const generateContent = jest.fn();
   const genai = {
@@ -88,9 +93,24 @@ describe('AiOrchestrationService', () => {
   });
 
   it('runs evaluation for AI DM, writes message and triggers state updates', async () => {
-    prismaFindManySheets.mockImplementation(async (args) => {
-      // Return only AI sheets when filtering for evaluateTurns step 1
-      if (args && args.where && args.where.aiProvider) {
+    prismaFindManySheets.mockImplementation(
+      (args: { where?: { aiProvider?: unknown } }) => {
+        // Return only AI sheets when filtering for evaluateTurns step 1
+        if (args?.where?.aiProvider) {
+          return [
+            {
+              id: 'ai-sheet-uuid',
+              name: 'Dungeon Master',
+              aiProvider: 'google',
+              aiModel: 'gemini-flash-latest',
+              hpCurrent: 100,
+              hpMax: 100,
+              stats: {},
+              inventory: [],
+            },
+          ];
+        }
+        // Return all sheets when requesting context in step 5
         return [
           {
             id: 'ai-sheet-uuid',
@@ -102,32 +122,19 @@ describe('AiOrchestrationService', () => {
             stats: {},
             inventory: [],
           },
+          {
+            id: 'player-sheet-uuid',
+            name: 'Legolas',
+            aiProvider: null,
+            aiModel: null,
+            hpCurrent: 15,
+            hpMax: 30,
+            stats: {},
+            inventory: [],
+          },
         ];
-      }
-      // Return all sheets when requesting context in step 5
-      return [
-        {
-          id: 'ai-sheet-uuid',
-          name: 'Dungeon Master',
-          aiProvider: 'google',
-          aiModel: 'gemini-flash-latest',
-          hpCurrent: 100,
-          hpMax: 100,
-          stats: {},
-          inventory: [],
-        },
-        {
-          id: 'player-sheet-uuid',
-          name: 'Legolas',
-          aiProvider: null,
-          aiModel: null,
-          hpCurrent: 15,
-          hpMax: 30,
-          stats: {},
-          inventory: [],
-        },
-      ];
-    });
+      },
+    );
 
     prismaFindManyMessages.mockResolvedValue([
       { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
@@ -197,6 +204,98 @@ describe('AiOrchestrationService', () => {
     );
   });
 
+  it('defaults to English instructions when no session language is provided', async () => {
+    prismaFindManySheets.mockResolvedValue([
+      {
+        id: 'ai-sheet-uuid',
+        name: 'Dungeon Master',
+        aiProvider: 'google',
+        aiModel: 'gemini-flash-latest',
+        hpCurrent: 100,
+        hpMax: 100,
+        stats: {},
+        inventory: [],
+      },
+    ]);
+    prismaFindManyMessages.mockResolvedValue([
+      { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
+    ]);
+    prismaFindUniqueStateLog.mockResolvedValue({
+      id: 'log-uuid',
+      activeQuests: [],
+    });
+    prismaCreateMessage.mockResolvedValue({
+      id: 'msg-uuid',
+      sessionId: 'session-uuid',
+      senderType: 'AI_DM',
+      senderName: 'Dungeon Master',
+      messageText: 'The orc falls.',
+      createdAt: new Date(),
+    });
+    generateContent.mockResolvedValue({
+      text: JSON.stringify({
+        messageText: 'The orc falls.',
+        stateUpdate: { campaignSummary: 'The orc fell.' },
+      }),
+    });
+
+    await service.evaluateTurns('session-uuid', jest.fn());
+
+    const call = firstCallArg<{ config: { systemInstruction: string } }>(
+      generateContent,
+    );
+    expect(call.config.systemInstruction).toContain('LANGUAGE.');
+    expect(call.config.systemInstruction).toContain('English');
+    expect(call.config.systemInstruction).not.toContain('Ukrainian');
+  });
+
+  it("writes the entire response in the session's language", async () => {
+    prismaFindManySheets.mockResolvedValue([
+      {
+        id: 'ai-sheet-uuid',
+        name: 'Dungeon Master',
+        aiProvider: 'google',
+        aiModel: 'gemini-flash-latest',
+        hpCurrent: 100,
+        hpMax: 100,
+        stats: {},
+        inventory: [],
+      },
+    ]);
+    prismaFindManyMessages.mockResolvedValue([
+      { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
+    ]);
+    prismaFindUniqueStateLog.mockResolvedValue({
+      id: 'log-uuid',
+      activeQuests: [],
+    });
+    prismaCreateMessage.mockResolvedValue({
+      id: 'msg-uuid',
+      sessionId: 'session-uuid',
+      senderType: 'AI_DM',
+      senderName: 'Dungeon Master',
+      messageText: 'Орк падає.',
+      createdAt: new Date(),
+    });
+    generateContent.mockResolvedValue({
+      text: JSON.stringify({
+        messageText: 'Орк падає.',
+        stateUpdate: { campaignSummary: 'Орк загинув.' },
+      }),
+    });
+
+    await service.evaluateTurns('session-uuid', jest.fn(), undefined, 'uk');
+
+    const call = firstCallArg<{ config: { systemInstruction: string } }>(
+      generateContent,
+    );
+    expect(call.config.systemInstruction).toContain('LANGUAGE.');
+    expect(call.config.systemInstruction).toContain('Ukrainian');
+    expect(call.config.systemInstruction).not.toContain(
+      "This campaign's language is English",
+    );
+  });
+
   it('broadcasts the mapped state-log payload after a campaign-log update', async () => {
     prismaFindManySheets.mockResolvedValue([
       {
@@ -256,12 +355,11 @@ describe('AiOrchestrationService', () => {
     const onBroadcast = jest.fn();
     await service.evaluateTurns('session-uuid', onBroadcast);
 
+    const dataMatcher: unknown = expect.objectContaining({
+      npcRelationships: { Elder: 'grateful' },
+    });
     expect(prismaUpdateStateLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({
-          npcRelationships: { Elder: 'grateful' },
-        }),
-      }),
+      expect.objectContaining({ data: dataMatcher }),
     );
     expect(onBroadcast).toHaveBeenCalledWith(expect.any(Object), [], {
       sessionId: 'session-uuid',
@@ -335,9 +433,9 @@ describe('AiOrchestrationService', () => {
     await service.evaluateTurns('session-uuid', jest.fn());
 
     expect(prismaUpdateStateLog).toHaveBeenCalledTimes(1);
-    const updateArg = prismaUpdateStateLog.mock.calls[0][0] as {
-      data: Record<string, unknown>;
-    };
+    const updateArg = firstCallArg<{ data: Record<string, unknown> }>(
+      prismaUpdateStateLog,
+    );
     // Summary is appended to prior text, not replaced.
     expect(updateArg.data.campaignSummary).toEqual({
       text: 'Chapter one. The party reached the harbor.',
@@ -410,9 +508,12 @@ describe('AiOrchestrationService', () => {
 
     await service.evaluateTurns('session-uuid', jest.fn());
 
-    const updateArg = prismaUpdateStateLog.mock.calls[0][0] as {
-      data: { keyFacts: Array<{ text: string; source: string }>; campaignSummary: { text: string } };
-    };
+    const updateArg = firstCallArg<{
+      data: {
+        keyFacts: Array<{ text: string; source: string }>;
+        campaignSummary: { text: string };
+      };
+    }>(prismaUpdateStateLog);
     // Cap is enforced: 99 + 2 new = 101 → oldest one evicted, 100 retained.
     expect(updateArg.data.keyFacts).toHaveLength(100);
     // The player-claim keeps its provenance tag.
@@ -478,9 +579,9 @@ describe('AiOrchestrationService', () => {
     await service.evaluateTurns('session-uuid', jest.fn());
 
     expect(prismaUpdateStateLog).toHaveBeenCalledTimes(1);
-    const updateArg = prismaUpdateStateLog.mock.calls[0][0] as {
-      data: Record<string, unknown>;
-    };
+    const updateArg = firstCallArg<{ data: Record<string, unknown> }>(
+      prismaUpdateStateLog,
+    );
     expect(updateArg.data).not.toHaveProperty('npcRelationships');
     expect(updateArg.data).toHaveProperty('campaignSummary');
   });
@@ -539,7 +640,11 @@ describe('AiOrchestrationService', () => {
         },
       ]);
       prismaFindManyMessages.mockResolvedValue([
-        { senderType: 'HUMAN', senderName: 'Player', messageText: 'Jump the chasm!' },
+        {
+          senderType: 'HUMAN',
+          senderName: 'Player',
+          messageText: 'Jump the chasm!',
+        },
       ]);
       prismaFindUniqueStateLog.mockResolvedValue({
         id: 'log-uuid',
@@ -558,7 +663,11 @@ describe('AiOrchestrationService', () => {
         text: JSON.stringify({
           messageText: 'I jump!',
           diceRolls: [
-            { characterName: 'Gimli', notation: '1d20+5', reason: 'athletics check' },
+            {
+              characterName: 'Gimli',
+              notation: '1d20+5',
+              reason: 'athletics check',
+            },
           ],
         }),
       });
@@ -569,7 +678,11 @@ describe('AiOrchestrationService', () => {
       });
 
       const onBroadcast = jest.fn();
-      await service.evaluateTurns('session-uuid', onBroadcast, 'companion-uuid');
+      await service.evaluateTurns(
+        'session-uuid',
+        onBroadcast,
+        'companion-uuid',
+      );
 
       expect(roll).toHaveBeenCalledWith('1d20+5', 'Gimli');
       expect(prismaCreateMessage).toHaveBeenCalledTimes(2);
@@ -590,7 +703,11 @@ describe('AiOrchestrationService', () => {
         },
       ]);
       prismaFindManyMessages.mockResolvedValue([
-        { senderType: 'HUMAN', senderName: 'Player', messageText: 'Hello companion' },
+        {
+          senderType: 'HUMAN',
+          senderName: 'Player',
+          messageText: 'Hello companion',
+        },
       ]);
       prismaFindUniqueStateLog.mockResolvedValue({
         id: 'log-uuid',
@@ -632,9 +749,9 @@ describe('AiOrchestrationService', () => {
       await service.evaluateTurns('session-uuid', jest.fn(), 'companion-uuid');
 
       expect(prismaUpdateStateLog).toHaveBeenCalledTimes(1);
-      const updateArg = prismaUpdateStateLog.mock.calls[0][0] as {
-        data: Record<string, unknown>;
-      };
+      const updateArg = firstCallArg<{ data: Record<string, unknown> }>(
+        prismaUpdateStateLog,
+      );
       // Quests, summary, and keyFacts are stripped for companion
       expect(updateArg.data).not.toHaveProperty('activeQuests');
       expect(updateArg.data).not.toHaveProperty('campaignSummary');
@@ -673,7 +790,11 @@ describe('AiOrchestrationService', () => {
 
       // 1. One AI message after a human message: Banter allowed (1 hop)
       prismaFindManyMessages.mockResolvedValue([
-        { senderType: 'AI_DM', senderName: 'Dungeon Master', messageText: 'The dragon roars.' },
+        {
+          senderType: 'AI_DM',
+          senderName: 'Dungeon Master',
+          messageText: 'The dragon roars.',
+        },
         { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
       ]);
       generateContent.mockResolvedValue({
@@ -703,7 +824,11 @@ describe('AiOrchestrationService', () => {
       });
       prismaFindManyMessages.mockResolvedValue([
         { senderType: 'AI_PLAYER', senderName: 'Gimli', messageText: 'I hit!' },
-        { senderType: 'AI_DM', senderName: 'Dungeon Master', messageText: 'The dragon roars.' },
+        {
+          senderType: 'AI_DM',
+          senderName: 'Dungeon Master',
+          messageText: 'The dragon roars.',
+        },
         { senderType: 'HUMAN', senderName: 'Player', messageText: 'I attack' },
       ]);
 

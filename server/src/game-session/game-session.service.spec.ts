@@ -24,6 +24,7 @@ describe('GameSessionService', () => {
     title: 'Test Lobby',
     creatorId: 'user-uuid',
     status: 'LOBBY',
+    language: 'en',
     createdAt: new Date('2026-07-10T12:00:00.000Z'),
   };
 
@@ -44,11 +45,13 @@ describe('GameSessionService', () => {
 
     const result = await service.createLobby('user-uuid', {
       title: 'Test Lobby',
+      language: 'en',
     });
 
     expect(sessionCreate).toHaveBeenCalledWith({
       data: {
         title: 'Test Lobby',
+        language: 'en',
         creatorId: 'user-uuid',
         sessionMembers: {
           create: { userId: 'user-uuid' },
@@ -61,10 +64,32 @@ describe('GameSessionService', () => {
       creatorId: 'user-uuid',
       status: 'LOBBY',
       createdAt: '2026-07-10T12:00:00.000Z',
+      language: 'en',
     });
   });
 
-  it('lists only sessions still in the lobby state', async () => {
+  it('persists a non-default language chosen at creation', async () => {
+    sessionCreate.mockResolvedValue({ ...dbSession, language: 'uk' });
+
+    const result = await service.createLobby('user-uuid', {
+      title: 'Test Lobby',
+      language: 'uk',
+    });
+
+    expect(sessionCreate).toHaveBeenCalledWith({
+      data: {
+        title: 'Test Lobby',
+        language: 'uk',
+        creatorId: 'user-uuid',
+        sessionMembers: {
+          create: { userId: 'user-uuid' },
+        },
+      },
+    });
+    expect(result.language).toBe('uk');
+  });
+
+  it('lists only sessions still in the lobby state, including their language', async () => {
     sessionFindMany.mockResolvedValue([dbSession]);
 
     const result = await service.listLobbies();
@@ -74,6 +99,7 @@ describe('GameSessionService', () => {
       orderBy: { createdAt: 'desc' },
     });
     expect(result).toHaveLength(1);
+    expect(result[0].language).toBe('en');
   });
 
   it('throws NotFoundException for a missing session', async () => {

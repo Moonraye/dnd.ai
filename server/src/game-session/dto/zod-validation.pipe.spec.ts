@@ -15,7 +15,7 @@ describe('ZodValidationPipe (global pipe wiring)', () => {
       { title: 'The Sunken Crypt' },
       bodyMetadata,
     );
-    expect(result).toEqual({ title: 'The Sunken Crypt' });
+    expect(result).toEqual({ title: 'The Sunken Crypt', language: 'en' });
   });
 
   it('strips unknown keys from the body', () => {
@@ -23,7 +23,7 @@ describe('ZodValidationPipe (global pipe wiring)', () => {
       { title: 'The Sunken Crypt', extra: 'ignored' },
       bodyMetadata,
     );
-    expect(result).toEqual({ title: 'The Sunken Crypt' });
+    expect(result).toEqual({ title: 'The Sunken Crypt', language: 'en' });
   });
 
   it('throws BadRequestException for an invalid body', () => {

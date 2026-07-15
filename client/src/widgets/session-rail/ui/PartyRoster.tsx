@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { isDungeonMasterSheet, type CharacterSheetPayload } from '@dnd/shared';
 import { useMyCharacter } from '@/features/character-sheet';
+import { format, useTranslation } from '@/shared/i18n';
 import { useSessionStore } from '@/shared/store/sessionStore';
 import { useAuthStore } from '@/shared/store/authStore';
 import { EditCompanionDialog } from '@/features/companion-management';
@@ -10,6 +11,7 @@ import { Badge, HpBar } from '@/shared/ui';
 import { apiFetch } from '@/shared/api/httpClient';
 
 export function PartyRoster() {
+  const { t } = useTranslation();
   const characters = useSessionStore((state) => state.characters);
   const session = useSessionStore((state) => state.session);
   const user = useAuthStore((state) => state.user);
@@ -20,20 +22,20 @@ export function PartyRoster() {
   if (characters.length === 0) {
     return (
       <p className="text-xs text-fg-subtle">
-        No adventurers have taken a seat yet.
+        {t.sessionRail.emptyParty}
       </p>
     );
   }
 
   const handleDismiss = async (charId: string, name: string) => {
-    const confirmed = window.confirm(`Are you sure you want to dismiss ${name}?`);
+    const confirmed = window.confirm(format(t.companions.confirmDismiss, { name }));
     if (!confirmed) return;
     try {
       await apiFetch(`/sessions/${session?.id}/characters/${charId}`, {
         method: 'DELETE',
       });
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to dismiss companion');
+      alert(err instanceof Error ? err.message : t.errors.dismissCompanionFailed);
     }
   };
 
@@ -61,11 +63,11 @@ export function PartyRoster() {
                     {character.name}
                   </span>
                   {isMe ? (
-                    <Badge variant="primary">You</Badge>
+                    <Badge variant="primary">{t.common.badges.you}</Badge>
                   ) : isDm ? (
-                    <Badge variant="accent">DM</Badge>
+                    <Badge variant="accent">{t.common.badges.dm}</Badge>
                   ) : isAi ? (
-                    <Badge variant="neutral">AI</Badge>
+                    <Badge variant="neutral">{t.common.badges.ai}</Badge>
                   ) : null}
                 </div>
 
@@ -75,17 +77,17 @@ export function PartyRoster() {
                       type="button"
                       onClick={() => setEditingChar(character)}
                       className="text-xs text-fg-muted hover:text-fg font-medium cursor-pointer px-1 py-0.5 rounded hover:bg-border transition-colors"
-                      title="Edit profile"
+                      title={t.sessionRail.editProfileTitle}
                     >
-                      Edit
+                      {t.sessionRail.edit}
                     </button>
                     <button
                       type="button"
                       onClick={() => handleDismiss(character.id, character.name)}
                       className="text-xs text-danger/80 hover:text-danger font-medium cursor-pointer px-1 py-0.5 rounded hover:bg-danger/10 transition-colors"
-                      title="Dismiss companion"
+                      title={t.sessionRail.dismissCompanionTitle}
                     >
-                      Dismiss
+                      {t.sessionRail.dismiss}
                     </button>
                   </div>
                 )}

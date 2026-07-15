@@ -1,4 +1,7 @@
+'use client';
+
 import { isDiceTermResult, type DiceRollMetadata } from '@dnd/shared';
+import { format, useTranslation } from '@/shared/i18n';
 
 interface DiceRollCardProps {
   senderName: string;
@@ -11,11 +14,15 @@ export function DiceRollCard({
   createdAt,
   metadata,
 }: DiceRollCardProps) {
+  const { t } = useTranslation();
   return (
     <div className="mx-auto flex w-full max-w-md flex-col gap-1 rounded-md border border-dice/40 bg-dice-subtle p-3 text-sm">
       <div className="flex items-baseline justify-between gap-2">
         <span className="font-semibold text-fg">
-          🎲 {senderName} rolled {metadata.notation}
+          {format(t.dice.rolledNotation, {
+            name: senderName,
+            notation: metadata.notation,
+          })}
         </span>
         <time dateTime={createdAt} className="font-mono text-xs text-fg-subtle">
           {new Date(createdAt).toLocaleTimeString()}
@@ -35,7 +42,7 @@ export function DiceRollCard({
         )}
       </div>
       <span className="text-base font-bold text-dice">
-        Total: {metadata.total}
+        {format(t.dice.total, { total: metadata.total })}
       </span>
     </div>
   );

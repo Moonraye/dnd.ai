@@ -9,10 +9,12 @@ import {
 } from '@dnd/shared';
 import { useCallback, useState } from 'react';
 import { getSocket } from '@/shared/api/socketClient';
+import { useTranslation } from '@/shared/i18n';
 
 const ROLL_ACK_TIMEOUT_MS = 5000;
 
 export function useRollDice(sessionId: string) {
+  const { t } = useTranslation();
   const [isRolling, setIsRolling] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,13 +53,13 @@ export function useRollDice(sessionId: string) {
         // store appends it, so nothing is added locally here.
         return true;
       } catch {
-        setError('Roll could not be sent');
+        setError(t.errors.rollFailed);
         return false;
       } finally {
         setIsRolling(false);
       }
     },
-    [sessionId],
+    [sessionId, t],
   );
 
   return { roll, isRolling, error };

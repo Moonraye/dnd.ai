@@ -2,12 +2,15 @@
 
 import { useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { Button } from '@/shared/ui';
+import { resolveValidationMessage } from '../model/resolveValidationMessage';
 import { useSignUp } from '../model/useSignUp';
 import { AuthField } from './AuthField';
 
 export function SignUpForm() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { submit, isSubmitting, error, fieldErrors } = useSignUp();
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -20,25 +23,25 @@ export function SignUpForm() {
   return (
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4" noValidate>
       <AuthField
-        label="Username"
+        label={t.auth.signUp.usernameLabel}
         name="username"
         type="text"
         autoComplete="username"
-        error={fieldErrors.username}
+        error={fieldErrors.username && resolveValidationMessage(t, fieldErrors.username)}
       />
       <AuthField
-        label="Email"
+        label={t.auth.signUp.emailLabel}
         name="email"
         type="email"
         autoComplete="email"
-        error={fieldErrors.email}
+        error={fieldErrors.email && resolveValidationMessage(t, fieldErrors.email)}
       />
       <AuthField
-        label="Password"
+        label={t.auth.signUp.passwordLabel}
         name="password"
         type="password"
         autoComplete="new-password"
-        error={fieldErrors.password}
+        error={fieldErrors.password && resolveValidationMessage(t, fieldErrors.password)}
       />
       {error ? (
         <p role="alert" className="text-sm text-danger">
@@ -46,7 +49,7 @@ export function SignUpForm() {
         </p>
       ) : null}
       <Button type="submit" size="lg" disabled={isSubmitting} className="mt-2 w-full">
-        {isSubmitting ? 'Creating account…' : 'Create account'}
+        {isSubmitting ? t.auth.signUp.submitting : t.auth.signUp.submit}
       </Button>
     </form>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { Button, Input } from '@/shared/ui';
 import { cn } from '@/shared/lib/cn';
 import { useSessionStore } from '@/shared/store/sessionStore';
@@ -25,6 +26,7 @@ export function ChatInput({
   diceOpen = false,
   onToggleDice,
 }: ChatInputProps) {
+  const { t } = useTranslation();
   const [text, setText] = useState('');
   const [localError, setLocalError] = useState<string | null>(null);
   const [isRolling, setIsRolling] = useState(false);
@@ -117,14 +119,14 @@ export function ChatInput({
 
         if (foundChar) {
           if (!messageText) {
-            setLocalError('Message body cannot be empty.');
+            setLocalError(t.chat.emptyMessageBody);
             return;
           }
           const ok = await send(messageText, command, foundChar.id);
           if (ok) setText('');
           return;
         } else {
-          setLocalError('Recipient character not found. Ensure the name matches a participant.');
+          setLocalError(t.chat.recipientNotFound);
           return;
         }
       }
@@ -144,7 +146,7 @@ export function ChatInput({
           <button
             type="button"
             onClick={onToggleDice}
-            aria-label="Toggle dice tray"
+            aria-label={t.chat.toggleDiceTray}
             aria-pressed={diceOpen}
             disabled={disabled}
             className={cn(
@@ -166,7 +168,7 @@ export function ChatInput({
               setText(event.target.value);
               setLocalError(null);
             }}
-            placeholder="Speak, adventurer…  (try /w @Legolas Hello)"
+            placeholder={t.chat.inputPlaceholder}
             disabled={disabled || isSending || isRolling}
             className="flex-1"
           />
@@ -175,7 +177,7 @@ export function ChatInput({
           {showCandidates && candidates.length > 0 && (
             <div className="absolute bottom-full mb-2 max-h-48 w-64 overflow-y-auto rounded-md border border-border bg-bg-popover p-1 shadow-lg z-50">
               <p className="px-2 py-1 text-[10px] font-semibold text-fg-subtle uppercase tracking-wider border-b border-border mb-1">
-                Choose Recipient
+                {t.chat.chooseRecipient}
               </p>
               {candidates.map((char) => (
                 <button
@@ -187,7 +189,7 @@ export function ChatInput({
                   <span>{char.name}</span>
                   {char.aiProvider && (
                     <span className="text-[9px] bg-border px-1.5 py-0.5 rounded text-fg-muted font-mono leading-none">
-                      AI
+                      {t.common.badges.ai}
                     </span>
                   )}
                 </button>
@@ -200,7 +202,7 @@ export function ChatInput({
           type="submit"
           disabled={disabled || isSending || isRolling || text.trim().length === 0}
         >
-          Send
+          {t.chat.send}
         </Button>
       </div>
       {activeError ? (

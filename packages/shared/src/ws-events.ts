@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { DiceRollMetadata } from './dice';
-import type { KeyFact } from './validation';
+import type { KeyFact, Language } from './validation';
 import type {
   AbilityScores,
   InventoryItem,
@@ -57,6 +57,8 @@ export interface SessionSummary {
   creatorId: string;
   status: SessionStatus;
   createdAt: string;
+  /** Chosen once at creation; the whole campaign (including AI DM turns) runs in this language. */
+  language: Language;
 }
 
 export interface ChatMessagePayload {

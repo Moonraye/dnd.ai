@@ -1,9 +1,11 @@
 'use client';
 
+import { useTranslation } from '@/shared/i18n';
 import { Button } from '@/shared/ui';
 import { useSignOut } from '../model/useSignOut';
 
 export function SignOutButton() {
+  const { t } = useTranslation();
   const { signOut, isSigningOut } = useSignOut();
 
   return (
@@ -13,7 +15,7 @@ export function SignOutButton() {
       onClick={() => void signOut()}
       disabled={isSigningOut}
     >
-      {isSigningOut ? 'Signing out…' : 'Sign out'}
+      {isSigningOut ? t.common.signingOut : t.common.signOut}
     </Button>
   );
 }

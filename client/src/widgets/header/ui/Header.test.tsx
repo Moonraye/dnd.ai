@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import type { Session, User } from '@supabase/supabase-js';
 import { useAuthStore } from '@/shared/store/authStore';
+import { useLanguageStore } from '@/shared/store/languageStore';
 import { ThemeProvider } from '@/features/theme';
 import { Header } from './Header';
 
@@ -16,6 +17,9 @@ const resetStore = () =>
 
 describe('Header', () => {
   beforeEach(resetStore);
+  afterEach(() => {
+    useLanguageStore.setState({ language: 'en' });
+  });
 
   it('shows a loading placeholder before the session is known', () => {
     renderHeader();
@@ -62,5 +66,16 @@ describe('Header', () => {
     renderHeader();
 
     expect(screen.getByText('player@example.com')).toBeInTheDocument();
+  });
+
+  it('renders the Ukrainian sign-in copy when the language store is set to "uk"', () => {
+    useLanguageStore.setState({ language: 'uk' });
+    useAuthStore.getState().setSession(null);
+    renderHeader();
+
+    expect(screen.getByRole('link', { name: 'Увійти' })).toHaveAttribute(
+      'href',
+      '/login',
+    );
   });
 });

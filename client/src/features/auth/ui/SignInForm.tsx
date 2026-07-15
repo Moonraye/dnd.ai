@@ -2,12 +2,15 @@
 
 import { useRouter } from 'next/navigation';
 import type { FormEvent } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { Button } from '@/shared/ui';
+import { resolveValidationMessage } from '../model/resolveValidationMessage';
 import { useSignIn } from '../model/useSignIn';
 import { AuthField } from './AuthField';
 
 export function SignInForm() {
   const router = useRouter();
+  const { t } = useTranslation();
   const { submit, isSubmitting, error, fieldErrors } = useSignIn();
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -20,18 +23,18 @@ export function SignInForm() {
   return (
     <form onSubmit={handleSubmit} className="flex w-full flex-col gap-4" noValidate>
       <AuthField
-        label="Email"
+        label={t.auth.signIn.emailLabel}
         name="email"
         type="email"
         autoComplete="email"
-        error={fieldErrors.email}
+        error={fieldErrors.email && resolveValidationMessage(t, fieldErrors.email)}
       />
       <AuthField
-        label="Password"
+        label={t.auth.signIn.passwordLabel}
         name="password"
         type="password"
         autoComplete="current-password"
-        error={fieldErrors.password}
+        error={fieldErrors.password && resolveValidationMessage(t, fieldErrors.password)}
       />
       {error ? (
         <p role="alert" className="text-sm text-danger">
@@ -39,7 +42,7 @@ export function SignInForm() {
         </p>
       ) : null}
       <Button type="submit" size="lg" disabled={isSubmitting} className="mt-2 w-full">
-        {isSubmitting ? 'Signing in…' : 'Sign in'}
+        {isSubmitting ? t.auth.signIn.submitting : t.auth.signIn.submit}
       </Button>
     </form>
   );

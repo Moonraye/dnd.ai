@@ -1,27 +1,29 @@
+'use client';
+
 import Link from 'next/link';
 import type { SessionStatus, SessionSummary } from '@dnd/shared';
+import { format, useTranslation, type Dictionary } from '@/shared/i18n';
 import { Badge, type BadgeProps } from '@/shared/ui';
 
-const STATUS: Record<
-  SessionStatus,
-  { label: string; variant: BadgeProps['variant'] }
-> = {
-  LOBBY: { label: 'Open', variant: 'primary' },
-  ACTIVE: { label: 'In session', variant: 'success' },
-  COMPLETED: { label: 'Ended', variant: 'neutral' },
+const STATUS_VARIANT: Record<SessionStatus, BadgeProps['variant']> = {
+  LOBBY: 'primary',
+  ACTIVE: 'success',
+  COMPLETED: 'neutral',
 };
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: Dictionary): string {
   const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t.lobby.time.justNow;
+  if (minutes < 60) return format(t.lobby.time.minutesAgo, { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+  if (hours < 24) return format(t.lobby.time.hoursAgo, { n: hours });
+  return format(t.lobby.time.daysAgo, { n: Math.floor(hours / 24) });
 }
 
 export function CampaignCard({ lobby }: { lobby: SessionSummary }) {
-  const status = STATUS[lobby.status] ?? STATUS.LOBBY;
+  const { t } = useTranslation();
+  const variant = STATUS_VARIANT[lobby.status] ?? STATUS_VARIANT.LOBBY;
+  const label = t.lobby.status[lobby.status] ?? t.lobby.status.LOBBY;
 
   return (
     <Link
@@ -32,12 +34,19 @@ export function CampaignCard({ lobby }: { lobby: SessionSummary }) {
         <h3 className="font-display text-lg leading-snug font-semibold text-fg">
           {lobby.title}
         </h3>
-        <Badge variant={status.variant}>{status.label}</Badge>
+        <Badge variant={variant}>{label}</Badge>
       </div>
       <div className="flex items-center justify-between text-sm text-fg-subtle">
-        <span>Created {timeAgo(lobby.createdAt)}</span>
+        <span className="flex items-center gap-2">
+          <span className="font-mono text-[10px] uppercase tracking-wide text-fg-subtle">
+            {t.lobby.languageBadge[lobby.language]}
+          </span>
+          <span>
+            {t.lobby.createdPrefix} {timeAgo(lobby.createdAt, t)}
+          </span>
+        </span>
         <span className="font-medium text-fg-muted transition-colors group-hover:text-primary">
-          Join →
+          {t.lobby.join}
         </span>
       </div>
     </Link>

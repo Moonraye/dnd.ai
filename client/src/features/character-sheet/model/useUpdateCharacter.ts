@@ -9,6 +9,7 @@ import {
 } from '@dnd/shared';
 import { useCallback, useState } from 'react';
 import { getSocket } from '@/shared/api/socketClient';
+import { useTranslation } from '@/shared/i18n';
 import { useSessionStore } from '@/shared/store/sessionStore';
 
 const UPDATE_ACK_TIMEOUT_MS = 5000;
@@ -16,6 +17,7 @@ const UPDATE_ACK_TIMEOUT_MS = 5000;
 type CharacterPatch = Omit<UpdateCharacterSheetInput, 'sessionId'>;
 
 export function useUpdateCharacter(sessionId: string) {
+  const { t } = useTranslation();
   const upsertCharacter = useSessionStore((state) => state.upsertCharacter);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +50,13 @@ export function useUpdateCharacter(sessionId: string) {
         upsertCharacter(response.data);
         return true;
       } catch {
-        setError('Update could not be saved');
+        setError(t.errors.updateFailed);
         return false;
       } finally {
         setIsSaving(false);
       }
     },
-    [sessionId, upsertCharacter],
+    [sessionId, upsertCharacter, t],
   );
 
   return { update, isSaving, error };
