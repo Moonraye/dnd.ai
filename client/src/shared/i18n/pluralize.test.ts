@@ -29,5 +29,9 @@ describe('pluralize', () => {
       expect(pluralize('uk', 3)).toBe('few');
       expect(pluralize('uk', 5)).toBe('many');
     });
+
+    it('buckets a non-integer count as "other" per CLDR', () => {
+      expect(pluralize('uk', 1.5)).toBe('other');
+    });
   });
 });

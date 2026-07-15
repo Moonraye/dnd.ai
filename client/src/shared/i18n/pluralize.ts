@@ -27,6 +27,9 @@ function pluralizeEnglish(count: number): PluralCategory {
  */
 function pluralizeUkrainian(count: number): PluralCategory {
   const n = Math.abs(count);
+  // Per CLDR, non-integer counts (e.g. 1.5) always bucket as "other" — the
+  // mod-10/mod-100 rules below only apply to whole numbers.
+  if (!Number.isInteger(n)) return 'other';
   const mod10 = n % 10;
   const mod100 = n % 100;
 

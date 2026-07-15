@@ -292,6 +292,7 @@ export const en = {
     usernameMaxLength: 'Username must be at most 24 characters',
     usernamePattern:
       'Username may only contain letters, numbers, hyphens and underscores',
+    lobbyTitleLength: 'Title must be 3–80 characters',
     generic: 'Invalid value',
   },
 };

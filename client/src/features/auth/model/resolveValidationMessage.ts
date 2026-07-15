@@ -12,6 +12,15 @@ const VALIDATION_KEY_PREFIX = 'validation.';
  */
 export function resolveValidationMessage(t: Dictionary, message: string): string {
   if (!message.startsWith(VALIDATION_KEY_PREFIX)) return message;
-  const key = message.slice(VALIDATION_KEY_PREFIX.length) as keyof Dictionary['validation'];
-  return t.validation[key] ?? t.validation.generic;
+  const key = message.slice(VALIDATION_KEY_PREFIX.length);
+  // Guard against inherited `Object.prototype` members (e.g. `toString`,
+  // `constructor`) so a key like `'validation.toString'` can't resolve to
+  // the inherited function instead of falling back to `validation.generic`.
+  if (
+    Object.prototype.hasOwnProperty.call(t.validation, key) &&
+    typeof t.validation[key as keyof Dictionary['validation']] === 'string'
+  ) {
+    return t.validation[key as keyof Dictionary['validation']];
+  }
+  return t.validation.generic;
 }

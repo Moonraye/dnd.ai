@@ -19,4 +19,16 @@ describe('resolveValidationMessage', () => {
       en.validation.generic,
     );
   });
+
+  it('falls back to validation.generic for "validation.toString" instead of the inherited function', () => {
+    expect(resolveValidationMessage(en, 'validation.toString')).toBe(
+      en.validation.generic,
+    );
+  });
+
+  it('falls back to validation.generic for "validation.constructor" instead of the inherited function', () => {
+    expect(resolveValidationMessage(en, 'validation.constructor')).toBe(
+      en.validation.generic,
+    );
+  });
 });

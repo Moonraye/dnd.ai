@@ -32,4 +32,15 @@ describe('languageStore', () => {
 
     expect(useLanguageStore.getState().language).toBe('uk');
   });
+
+  it('falls back to "en" for a tampered/corrupt persisted language', async () => {
+    localStorage.setItem(
+      LANGUAGE_STORAGE_KEY,
+      JSON.stringify({ state: { language: 'fr' }, version: 0 }),
+    );
+
+    await useLanguageStore.persist.rehydrate();
+
+    expect(useLanguageStore.getState().language).toBe('en');
+  });
 });

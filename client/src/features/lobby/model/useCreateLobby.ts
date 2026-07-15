@@ -19,10 +19,18 @@ export function useCreateLobby() {
     async (title: string, language: Language): Promise<boolean> => {
       if (inFlight.current) return false;
 
-      // ADR 3: same shared schema the server validates with.
+      // ADR 3: same shared schema the server validates with. Zod's default
+      // messages are raw, untranslated English — `CreateLobbySchema` doesn't
+      // define custom ones, so map the only field it validates (`title`) to
+      // a translated copy instead of leaking the raw message.
       const parsed = CreateLobbySchema.safeParse({ title, language });
       if (!parsed.success) {
-        setError(parsed.error.issues[0].message);
+        const issue = parsed.error.issues[0];
+        setError(
+          issue.path[0] === 'title'
+            ? t.validation.lobbyTitleLength
+            : t.validation.generic,
+        );
         return false;
       }
 

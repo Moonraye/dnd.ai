@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { en } from '@/shared/i18n';
 import { createLobby } from '../api/lobbyApi';
 import { useCreateLobby } from './useCreateLobby';
 
@@ -26,7 +27,7 @@ describe('useCreateLobby', () => {
     });
 
     expect(ok).toBe(false);
-    expect(result.current.error).toBeTruthy();
+    expect(result.current.error).toBe(en.validation.lobbyTitleLength);
     expect(createLobbyMock).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
   });

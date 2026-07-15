@@ -10,8 +10,8 @@ import {
 } from '@dnd/shared';
 import { useState, useEffect } from 'react';
 import { getSocket } from '@/shared/api/socketClient';
-import { useTranslation } from '@/shared/i18n';
 import { useSessionStore } from '@/shared/store/sessionStore';
+import { JOIN_ERROR_KEYS } from './resolveJoinError';
 
 const JOIN_ACK_TIMEOUT_MS = 5000;
 
@@ -23,7 +23,6 @@ const JOIN_ACK_TIMEOUT_MS = 5000;
  * re-join and catch up on missed messages (ADR 6) through one code path.
  */
 export function useSessionSocket(sessionId: string) {
-  const { t } = useTranslation();
   const [retryCount, setRetryCount] = useState(0);
   const session = useSessionStore((state) => state.session);
   const messages = useSessionStore((state) => state.messages);
@@ -70,7 +69,7 @@ export function useSessionSocket(sessionId: string) {
         store.getState().setJoinStatus('joined');
       } catch {
         if (!cancelled) {
-          store.getState().setJoinStatus('error', t.errors.connectionTimedOut);
+          store.getState().setJoinStatus('error', JOIN_ERROR_KEYS.connectionTimedOut);
         }
       } finally {
         isJoining = false;
@@ -90,7 +89,7 @@ export function useSessionSocket(sessionId: string) {
       store.getState().setCharacterThinking(payload.characterId, payload.thinking);
     const onDisconnect = () => store.getState().setJoinStatus('connecting');
     const onConnectError = () =>
-      store.getState().setJoinStatus('error', t.errors.unableToConnect);
+      store.getState().setJoinStatus('error', JOIN_ERROR_KEYS.unableToConnect);
 
     socket.on('connect', onConnect);
     socket.on(WS_EVENTS.CHAT_MESSAGE, onChatMessage);
@@ -129,9 +128,6 @@ export function useSessionSocket(sessionId: string) {
       socket.off('disconnect', onDisconnect);
       socket.off('connect_error', onConnectError);
     };
-    // `t` is intentionally excluded — a language switch mid-session must not
-    // tear down and rejoin the live socket connection.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, retryCount]);
 
   return { session, messages, characters, joinStatus, joinError, retry };

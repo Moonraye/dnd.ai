@@ -38,8 +38,11 @@ export function GoogleSignInButton() {
     try {
       // On success the browser is redirected to Google and never comes back here.
       await signInWithGoogle();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : t.auth.google.genericError);
+    } catch {
+      // Supabase `AuthError` messages are raw, untranslated, provider text
+      // with no stable set of error codes to map — always show the generic,
+      // translated error instead of leaking them to the user.
+      setError(t.auth.google.genericError);
       setIsLoading(false);
     }
   };

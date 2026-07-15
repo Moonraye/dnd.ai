@@ -1,6 +1,6 @@
 'use client';
 
-import { useTranslation, type Language } from '@/shared/i18n';
+import { LANGUAGES, useTranslation, type Language } from '@/shared/i18n';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,10 +8,10 @@ import {
   DropdownMenuTrigger,
 } from '@/shared/ui';
 
-const OPTIONS: { value: Language; labelKey: 'english' | 'ukrainian' }[] = [
-  { value: 'en', labelKey: 'english' },
-  { value: 'uk', labelKey: 'ukrainian' },
-];
+const LABEL_KEYS: Record<Language, 'english' | 'ukrainian'> = {
+  en: 'english',
+  uk: 'ukrainian',
+};
 
 /**
  * Header control that opens a dropdown to pick English or Ukrainian.
@@ -45,13 +45,10 @@ export function LanguageSwitcher() {
         </svg>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
-        {OPTIONS.map((option) => (
-          <DropdownMenuItem
-            key={option.value}
-            onSelect={() => setLanguage(option.value)}
-          >
-            <span className="flex-1">{t.common.language[option.labelKey]}</span>
-            {language === option.value ? (
+        {LANGUAGES.map((value) => (
+          <DropdownMenuItem key={value} onSelect={() => setLanguage(value)}>
+            <span className="flex-1">{t.common.language[LABEL_KEYS[value]]}</span>
+            {language === value ? (
               <svg
                 width="14"
                 height="14"

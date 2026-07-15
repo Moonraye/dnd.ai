@@ -160,7 +160,9 @@ export const uk: Dictionary = {
     // plural is the genitive plural regardless of count) — the buckets stay
     // separate because `pluralize()` is shared, general-purpose CLDR logic
     // used across the app, not tailored to this one string. `other` is
-    // unreachable for 'uk' (see `pluralize.ts`) and mirrors `many`.
+    // unreachable for integer counts (see `pluralize.ts`) and mirrors `many`;
+    // the mod-10/mod-100 buckets above only apply to integers — a non-integer
+    // count always resolves to `other` per CLDR.
     summonPlayers: {
       one: 'Закликати {n} ШІ-гравця',
       few: 'Закликати {n} ШІ-гравців',
@@ -298,6 +300,7 @@ export const uk: Dictionary = {
     usernameMaxLength: "Ім'я користувача має містити не більше 24 символів",
     usernamePattern:
       "Ім'я користувача може містити лише літери, цифри, дефіси та підкреслення",
+    lobbyTitleLength: 'Назва має містити від 3 до 80 символів',
     generic: 'Некоректне значення',
   },
 };

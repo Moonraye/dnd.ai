@@ -7,6 +7,6 @@ export function format(
   params: Record<string, string | number>,
 ): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) =>
-    key in params ? String(params[key]) : match,
+    Object.prototype.hasOwnProperty.call(params, key) ? String(params[key]) : match,
   );
 }

@@ -48,8 +48,10 @@ describe('detectBrowserLanguage', () => {
     // @ts-expect-error — simulating an environment without `navigator`.
     delete globalThis.navigator;
 
-    expect(detectBrowserLanguage()).toBe('en');
-
-    globalThis.navigator = originalNavigator;
+    try {
+      expect(detectBrowserLanguage()).toBe('en');
+    } finally {
+      globalThis.navigator = originalNavigator;
+    }
   });
 });

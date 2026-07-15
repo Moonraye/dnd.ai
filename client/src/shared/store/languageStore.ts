@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import type { Language } from '@/shared/i18n/language';
+import { LANGUAGES, type Language } from '@/shared/i18n/language';
 
 /** localStorage key holding the user's explicit language choice. */
 export const LANGUAGE_STORAGE_KEY = 'dundrai-language';
@@ -29,6 +29,18 @@ export const useLanguageStore = create<LanguageState>()(
       name: LANGUAGE_STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
       skipHydration: true,
+      // localStorage is untrusted — a tampered/corrupt value (e.g. "fr")
+      // would otherwise rehydrate straight into state and break dictionary
+      // lookups downstream. Fall back to "en" for anything not in
+      // `LANGUAGES`.
+      merge: (persistedState, currentState) => {
+        const persistedLanguage = (persistedState as Partial<LanguageState> | null)
+          ?.language;
+        const language = LANGUAGES.includes(persistedLanguage as Language)
+          ? (persistedLanguage as Language)
+          : 'en';
+        return { ...currentState, language };
+      },
     },
   ),
 );

@@ -8,7 +8,12 @@ import {
   useMyCharacter,
 } from '@/features/character-sheet';
 import { DiceRollerPanel, useRollDice } from '@/features/dice-roller';
-import { ChatInput, ChatWindow, useSessionSocket } from '@/features/session-chat';
+import {
+  ChatInput,
+  ChatWindow,
+  resolveJoinError,
+  useSessionSocket,
+} from '@/features/session-chat';
 import { ThemeToggle } from '@/features/theme';
 import { useTranslation, type Dictionary } from '@/shared/i18n';
 import { useAuthStore } from '@/shared/store/authStore';
@@ -140,7 +145,7 @@ export function SessionPage({ sessionId }: SessionPageProps) {
       {joinStatus === 'error' ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/5 px-4 py-2">
           <p role="alert" className="text-sm text-danger">
-            {joinError || t.session.unableToConnect}
+            {joinError ? resolveJoinError(t, joinError) : t.session.unableToConnect}
           </p>
           <Button variant="danger" size="sm" onClick={retry}>
             {t.session.retryConnection}

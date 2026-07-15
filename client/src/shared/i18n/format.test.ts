@@ -22,4 +22,12 @@ describe('format', () => {
   it('substitutes a numeric 0 correctly (not treated as missing)', () => {
     expect(format('Total: {total}', { total: 0 })).toBe('Total: 0');
   });
+
+  it('leaves "{constructor}" literal when params does not define it', () => {
+    expect(format('Hello {constructor}', {})).toBe('Hello {constructor}');
+  });
+
+  it('leaves "{toString}" literal when params does not define it', () => {
+    expect(format('Hello {toString}', {})).toBe('Hello {toString}');
+  });
 });

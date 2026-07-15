@@ -677,9 +677,10 @@ Task: Respond as the participant named "${agentSheet.name}".${
     }
 
     // 10. Broadcast narrative chat, HUD state updates, and campaign memory.
-    // Fire-and-forget: the gateway's broadcast callback may be async (e.g. to
-    // resolve whisper recipients), but evaluateTurns doesn't need to wait on it.
-    void onBroadcast(
+    // Awaited so the narrative message reaches clients before its roll cards
+    // and a rejected broadcast surfaces instead of becoming an unhandled
+    // rejection.
+    await onBroadcast(
       {
         id: createdMsg.id,
         sessionId: createdMsg.sessionId,
@@ -698,7 +699,7 @@ Task: Respond as the participant named "${agentSheet.name}".${
 
     // Broadcast rolled cards as separate events
     for (const rollMsg of rolledMessages) {
-      void onBroadcast(
+      await onBroadcast(
         {
           id: rollMsg.id,
           sessionId: rollMsg.sessionId,
