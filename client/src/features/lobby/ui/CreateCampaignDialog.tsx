@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 import {
   Button,
   Dialog,
@@ -11,8 +12,15 @@ import {
 } from '@/shared/ui';
 import { CreateLobbyForm } from './CreateLobbyForm';
 
-export function CreateCampaignDialog() {
-  const [open, setOpen] = useState(false);
+function CreateCampaignDialogInner() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const shouldAutoOpen = searchParams.get('create') === '1';
+  const [open, setOpen] = useState(shouldAutoOpen);
+
+  useEffect(() => {
+    if (shouldAutoOpen) router.replace('/lobby');
+  }, [shouldAutoOpen, router]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -30,5 +38,13 @@ export function CreateCampaignDialog() {
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function CreateCampaignDialog() {
+  return (
+    <Suspense fallback={<Button>Create campaign</Button>}>
+      <CreateCampaignDialogInner />
+    </Suspense>
   );
 }

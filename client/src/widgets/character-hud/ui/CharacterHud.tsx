@@ -21,6 +21,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
   const [inventory, setInventory] = useState<
     Array<InventoryItem & { client_id: string }>
   >([]);
+  const [hpAmountInput, setHpAmountInput] = useState('1');
 
   const inventoryKey = useMemo(
     () => JSON.stringify(myCharacter?.inventory ?? []),
@@ -29,6 +30,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
 
   useEffect(() => {
     const items = JSON.parse(inventoryKey) as InventoryItem[];
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- syncs local inventory rows from the server payload
     setInventory(
       items.map((item) => ({
         name: item.name,
@@ -48,6 +50,18 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
     if (next !== myCharacter.hpCurrent) void update({ hpCurrent: next });
   };
 
+  const clampHpAmount = (value: number) => {
+    const max = Math.max(1, Math.min(999, myCharacter.hpMax));
+    return Math.min(max, Math.max(1, Math.round(value) || 1));
+  };
+
+  const hpAmount = clampHpAmount(Number(hpAmountInput));
+
+  const stepHpAmount = (delta: number) =>
+    setHpAmountInput(String(clampHpAmount(hpAmount + delta)));
+
+  const commitHpAmount = () => setHpAmountInput(String(hpAmount));
+
   const saveInventory = () =>
     void update({
       inventory: inventory.filter((item) => item.name.trim().length > 0),
@@ -60,21 +74,53 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           {myCharacter.name}
         </h2>
         <HpBar hpCurrent={myCharacter.hpCurrent} hpMax={myCharacter.hpMax} />
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           <Button
             variant="secondary"
             size="sm"
             aria-label="Take damage"
-            onClick={() => changeHp(-1)}
+            onClick={() => changeHp(-hpAmount)}
             disabled={isSaving}
           >
             − Damage
           </Button>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2"
+              aria-label="Decrease HP change amount"
+              onClick={() => stepHpAmount(-1)}
+              disabled={isSaving}
+            >
+              −
+            </Button>
+            <Input
+              type="number"
+              min={1}
+              max={999}
+              aria-label="HP change amount"
+              value={hpAmountInput}
+              onChange={(event) => setHpAmountInput(event.target.value)}
+              onBlur={commitHpAmount}
+              className="h-8 w-14 text-center font-mono tabular-nums"
+            />
+            <Button
+              variant="ghost"
+              size="sm"
+              className="px-2"
+              aria-label="Increase HP change amount"
+              onClick={() => stepHpAmount(1)}
+              disabled={isSaving}
+            >
+              +
+            </Button>
+          </div>
           <Button
             variant="secondary"
             size="sm"
             aria-label="Heal"
-            onClick={() => changeHp(1)}
+            onClick={() => changeHp(hpAmount)}
             disabled={isSaving}
           >
             + Heal
