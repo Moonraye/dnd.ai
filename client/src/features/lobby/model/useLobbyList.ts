@@ -2,15 +2,20 @@
 
 import type { SessionSummary } from '@dnd/shared';
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { listLobbies } from '../api/lobbyApi';
 
-const toErrorMessage = (err: unknown): string =>
-  err instanceof Error ? err.message : 'Failed to load lobbies';
-
 export function useLobbyList() {
+  const { t } = useTranslation();
   const [lobbies, setLobbies] = useState<SessionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const toErrorMessage = useCallback(
+    (err: unknown): string =>
+      err instanceof Error ? err.message : t.errors.loadLobbiesFailed,
+    [t],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -30,6 +35,8 @@ export function useLobbyList() {
     return () => {
       cancelled = true;
     };
+    // Runs once on mount only — a language switch must not refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const refresh = useCallback(async () => {
@@ -42,7 +49,7 @@ export function useLobbyList() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [toErrorMessage]);
 
   return { lobbies, isLoading, error, refresh };
 }

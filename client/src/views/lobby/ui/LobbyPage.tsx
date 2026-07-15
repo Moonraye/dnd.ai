@@ -3,11 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 import { CreateCampaignDialog, LobbyList } from '@/features/lobby';
+import { useTranslation } from '@/shared/i18n';
 import { useAuthStore } from '@/shared/store/authStore';
 import { Header } from '@/widgets/header';
 
 export function LobbyPage() {
   const router = useRouter();
+  const { t } = useTranslation();
   const status = useAuthStore((state) => state.status);
 
   useEffect(() => {
@@ -42,11 +44,9 @@ export function LobbyPage() {
         <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="font-display text-3xl font-semibold tracking-tight text-fg">
-              Choose your table
+              {t.lobby.title}
             </h1>
-            <p className="mt-1 text-sm text-fg-muted">
-              Join an open campaign, or start one of your own.
-            </p>
+            <p className="mt-1 text-sm text-fg-muted">{t.lobby.subtitle}</p>
           </div>
           <CreateCampaignDialog />
         </div>

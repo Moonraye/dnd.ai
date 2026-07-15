@@ -2,10 +2,12 @@
 
 import { CharacterSheetSchema, type CharacterSheetInput } from '@dnd/shared';
 import { useCallback, useState } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { useSessionStore } from '@/shared/store/sessionStore';
 import { createCharacter } from '../api/characterApi';
 
 export function useCreateCharacter(sessionId: string) {
+  const { t } = useTranslation();
   const upsertCharacter = useSessionStore((state) => state.upsertCharacter);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,14 +31,14 @@ export function useCreateCharacter(sessionId: string) {
         return true;
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : 'Failed to create character',
+          err instanceof Error ? err.message : t.errors.createCharacterFailed,
         );
         return false;
       } finally {
         setIsSubmitting(false);
       }
     },
-    [sessionId, upsertCharacter],
+    [sessionId, upsertCharacter, t],
   );
 
   return { submit, isSubmitting, error };

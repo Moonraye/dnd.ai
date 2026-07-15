@@ -1,19 +1,24 @@
+'use client';
+
 import Link from 'next/link';
 import { AuthShell, SignUpForm } from '@/features/auth';
+import { useTranslation } from '@/shared/i18n';
 
 export default function SignUpPage() {
+  const { t } = useTranslation();
+
   return (
     <AuthShell
-      title="Create your account"
-      subtitle="Name your adventurer and take a seat at the table."
+      title={t.auth.signUp.title}
+      subtitle={t.auth.signUp.subtitle}
       footer={
         <>
-          Already have an account?{' '}
+          {t.auth.signUp.footerPrompt}{' '}
           <Link
             href="/login"
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
-            Sign in
+            {t.auth.signUp.footerLink}
           </Link>
         </>
       }

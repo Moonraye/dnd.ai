@@ -10,6 +10,7 @@ import {
 import { DiceRollerPanel, useRollDice } from '@/features/dice-roller';
 import { ChatInput, ChatWindow, useSessionSocket } from '@/features/session-chat';
 import { ThemeToggle } from '@/features/theme';
+import { useTranslation, type Dictionary } from '@/shared/i18n';
 import { useAuthStore } from '@/shared/store/authStore';
 import type { JoinStatus } from '@/shared/store/sessionStore';
 import {
@@ -33,14 +34,15 @@ interface SessionPageProps {
   sessionId: string;
 }
 
-function ConnectionPill({ status }: { status: JoinStatus }) {
-  if (status === 'joined') return <Badge variant="success">Connected</Badge>;
-  if (status === 'error') return <Badge variant="danger">Disconnected</Badge>;
-  return <Badge variant="warning">Connecting…</Badge>;
+function ConnectionPill({ status, t }: { status: JoinStatus; t: Dictionary }) {
+  if (status === 'joined') return <Badge variant="success">{t.session.connected}</Badge>;
+  if (status === 'error') return <Badge variant="danger">{t.session.disconnected}</Badge>;
+  return <Badge variant="warning">{t.session.connecting}</Badge>;
 }
 
 export function SessionPage({ sessionId }: SessionPageProps) {
   const router = useRouter();
+  const { t } = useTranslation();
   const authStatus = useAuthStore((state) => state.status);
   const { session, messages, joinStatus, joinError, retry } =
     useSessionSocket(sessionId);
@@ -75,14 +77,13 @@ export function SessionPage({ sessionId }: SessionPageProps) {
         </div>
         <div className="w-full max-w-2xl">
           <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">
-            Before you take your seat
+            {t.session.beforeYouTakeYourSeat}
           </p>
           <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight text-fg">
-            Forge your hero
+            {t.session.forgeYourHero}
           </h1>
           <p className="mt-2 text-sm text-fg-muted">
-            Name your adventurer and set their abilities. The dungeon master is
-            waiting.
+            {t.session.forgeYourHeroSubtitle}
           </p>
           <div className="mt-8">
             <CharacterCreationForm sessionId={sessionId} />
@@ -107,21 +108,21 @@ export function SessionPage({ sessionId }: SessionPageProps) {
             /
           </span>
           <h1 className="truncate font-display text-base font-medium text-fg">
-            {session?.title ?? 'Loading session…'}
+            {session?.title ?? t.session.loadingTitle}
           </h1>
-          <ConnectionPill status={joinStatus} />
+          <ConnectionPill status={joinStatus} t={t} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {/* Party drawer trigger — below xl, where the rail is hidden. */}
           <Drawer>
             <DrawerTrigger asChild>
               <Button variant="secondary" size="sm" className="xl:hidden">
-                Party
+                {t.session.party}
               </Button>
             </DrawerTrigger>
             <DrawerContent>
               <DrawerTitle className="font-display text-lg text-fg">
-                The party
+                {t.session.theParty}
               </DrawerTitle>
               <SessionRail sessionId={sessionId} />
             </DrawerContent>
@@ -131,7 +132,7 @@ export function SessionPage({ sessionId }: SessionPageProps) {
             href="/lobby"
             className={buttonVariants({ variant: 'ghost', size: 'sm' })}
           >
-            Leave
+            {t.session.leave}
           </Link>
         </div>
       </header>
@@ -139,10 +140,10 @@ export function SessionPage({ sessionId }: SessionPageProps) {
       {joinStatus === 'error' ? (
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-danger/30 bg-danger/5 px-4 py-2">
           <p role="alert" className="text-sm text-danger">
-            {joinError || 'Unable to connect to the game session.'}
+            {joinError || t.session.unableToConnect}
           </p>
           <Button variant="danger" size="sm" onClick={retry}>
-            Retry connection
+            {t.session.retryConnection}
           </Button>
         </div>
       ) : null}
@@ -173,12 +174,12 @@ export function SessionPage({ sessionId }: SessionPageProps) {
             <Drawer>
               <DrawerTrigger asChild>
                 <Button variant="secondary" size="sm" className="flex-1">
-                  Sheet
+                  {t.session.sheet}
                 </Button>
               </DrawerTrigger>
               <DrawerContent side="bottom">
                 <DrawerTitle className="font-display text-lg text-fg">
-                  Character
+                  {t.session.character}
                 </DrawerTitle>
                 <CharacterHud sessionId={sessionId} />
               </DrawerContent>
@@ -186,12 +187,12 @@ export function SessionPage({ sessionId }: SessionPageProps) {
             <Drawer>
               <DrawerTrigger asChild>
                 <Button variant="secondary" size="sm" className="flex-1">
-                  Journal
+                  {t.session.journal}
                 </Button>
               </DrawerTrigger>
               <DrawerContent side="bottom">
                 <DrawerTitle className="font-display text-lg text-fg">
-                  Campaign journal
+                  {t.session.campaignJournal}
                 </DrawerTitle>
                 <CampaignJournal />
               </DrawerContent>
@@ -202,8 +203,8 @@ export function SessionPage({ sessionId }: SessionPageProps) {
         <aside className="hidden min-h-0 flex-col overflow-hidden border-l border-border p-5 md:flex">
           <Tabs defaultValue="sheet" className="flex min-h-0 flex-1 flex-col">
             <TabsList className="mb-4 w-full">
-              <TabsTrigger value="sheet">Sheet</TabsTrigger>
-              <TabsTrigger value="journal">Journal</TabsTrigger>
+              <TabsTrigger value="sheet">{t.session.sheet}</TabsTrigger>
+              <TabsTrigger value="journal">{t.session.journal}</TabsTrigger>
             </TabsList>
             <TabsContent
               value="sheet"

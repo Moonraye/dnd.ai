@@ -1,5 +1,8 @@
+'use client';
+
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import { GoogleSignInButton } from './GoogleSignInButton';
 
 interface AuthShellProps {
@@ -15,6 +18,8 @@ interface AuthShellProps {
  * `lg`, collapsing to a single centered column on smaller screens.
  */
 export function AuthShell({ title, subtitle, children, footer }: AuthShellProps) {
+  const { t } = useTranslation();
+
   return (
     <main className="flex min-h-dvh flex-1">
       <aside className="relative hidden w-1/2 flex-col justify-between overflow-hidden border-r border-border bg-bg-subtle p-12 lg:flex">
@@ -32,16 +37,14 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
 
         <blockquote className="max-w-md">
           <p className="font-display text-3xl leading-relaxed italic text-fg">
-            Every campaign begins with a door, a stranger, and a choice.
+            {t.auth.brand.quote}
           </p>
           <p className="mt-4 font-mono text-xs uppercase tracking-[0.22em] text-accent">
-            Your table is waiting
+            {t.auth.brand.kicker}
           </p>
         </blockquote>
 
-        <p className="text-xs text-fg-subtle">
-          Real-time multiplayer D&amp;D with AI dungeon masters.
-        </p>
+        <p className="text-xs text-fg-subtle">{t.auth.brand.footer}</p>
       </aside>
 
       <div className="flex flex-1 items-center justify-center p-6 sm:p-10">
@@ -61,7 +64,7 @@ export function AuthShell({ title, subtitle, children, footer }: AuthShellProps)
           <div className="my-6 flex items-center gap-3">
             <span className="h-px flex-1 bg-border" />
             <span className="text-xs uppercase tracking-wide text-fg-subtle">
-              or
+              {t.auth.divider}
             </span>
             <span className="h-px flex-1 bg-border" />
           </div>

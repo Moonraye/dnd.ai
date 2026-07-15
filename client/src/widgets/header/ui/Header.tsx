@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 import { useSignOut } from '@/features/auth';
+import { LanguageSwitcher } from '@/features/language';
 import { ThemeToggle } from '@/features/theme';
+import { useTranslation } from '@/shared/i18n';
 import { useAuthStore } from '@/shared/store/authStore';
 import {
   buttonVariants,
@@ -18,6 +20,7 @@ export function Header() {
   const status = useAuthStore((state) => state.status);
   const user = useAuthStore((state) => state.user);
   const { signOut, isSigningOut } = useSignOut();
+  const { t } = useTranslation();
 
   const displayName =
     (user?.user_metadata?.username as string | undefined) ?? user?.email;
@@ -64,7 +67,7 @@ export function Header() {
                   void signOut();
                 }}
               >
-                {isSigningOut ? 'Signing out…' : 'Sign out'}
+                {isSigningOut ? t.common.signingOut : t.common.signOut}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -74,16 +77,17 @@ export function Header() {
               href="/login"
               className={buttonVariants({ variant: 'ghost', size: 'sm' })}
             >
-              Sign in
+              {t.header.signIn}
             </Link>
             <Link
               href="/signup"
               className={buttonVariants({ variant: 'primary', size: 'sm' })}
             >
-              Sign up
+              {t.header.signUp}
             </Link>
           </nav>
         )}
+        <LanguageSwitcher />
         <ThemeToggle />
       </div>
     </header>

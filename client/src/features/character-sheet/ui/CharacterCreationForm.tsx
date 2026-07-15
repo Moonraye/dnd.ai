@@ -6,14 +6,11 @@ import type {
   InventoryItem,
 } from '@dnd/shared';
 import { useState, type FormEvent } from 'react';
+import { format, useTranslation } from '@/shared/i18n';
 import { Button, Input, Panel, Textarea } from '@/shared/ui';
 import { useCharacterDraft } from '../model/useCharacterDraft';
 import { useCreateCharacter } from '../model/useCreateCharacter';
-import {
-  ABILITY_KEYS,
-  ABILITY_LABELS,
-  applyStandardArray,
-} from '../model/standardArray';
+import { ABILITY_KEYS, applyStandardArray } from '../model/standardArray';
 
 interface CharacterCreationFormProps {
   sessionId: string;
@@ -31,6 +28,7 @@ const DEFAULT_STATS: AbilityScores = {
 export function CharacterCreationForm({
   sessionId,
 }: CharacterCreationFormProps) {
+  const { t } = useTranslation();
   const { submit, isSubmitting, error } = useCreateCharacter(sessionId);
   const { generate, isGenerating, error: draftError } = useCharacterDraft();
 
@@ -76,12 +74,12 @@ export function CharacterCreationForm({
     >
       <Panel className="flex flex-col gap-2 bg-bg-subtle">
         <span className="text-sm font-medium text-fg">
-          Generate with AI (optional)
+          {t.character.generateWithAi}
         </span>
         <Textarea
           value={concept}
           onChange={(event) => setConcept(event.target.value)}
-          placeholder="A grizzled dwarf cleric who lost their faith…"
+          placeholder={t.character.conceptPlaceholder}
           rows={2}
         />
         <div className="flex items-center gap-3">
@@ -91,10 +89,10 @@ export function CharacterCreationForm({
             onClick={handleGenerate}
             disabled={isGenerating || concept.trim().length === 0}
           >
-            {isGenerating ? 'Generating…' : 'Generate draft'}
+            {isGenerating ? t.character.generating : t.character.generateDraft}
           </Button>
           <span className="text-xs text-fg-subtle">
-            A draft — review and edit before saving.
+            {t.character.draftHint}
           </span>
         </div>
         {draftError ? (
@@ -105,18 +103,18 @@ export function CharacterCreationForm({
       </Panel>
 
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="font-medium text-fg">Name</span>
+        <span className="font-medium text-fg">{t.character.name}</span>
         <Input
           name="name"
           type="text"
           value={name}
           onChange={(event) => setName(event.target.value)}
-          placeholder="Thorin Oakenshield"
+          placeholder={t.character.namePlaceholder}
         />
       </label>
 
       <label className="flex w-32 flex-col gap-1.5 text-sm">
-        <span className="font-medium text-fg">Max HP</span>
+        <span className="font-medium text-fg">{t.character.maxHp}</span>
         <Input
           name="hpMax"
           type="number"
@@ -128,21 +126,21 @@ export function CharacterCreationForm({
 
       <fieldset className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <legend className="text-sm font-medium text-fg">Ability scores</legend>
+          <legend className="text-sm font-medium text-fg">{t.character.abilityScores}</legend>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setStats(applyStandardArray())}
           >
-            Standard array
+            {t.character.standardArray}
           </Button>
         </div>
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
           {ABILITY_KEYS.map((key) => (
             <label key={key} className="flex flex-col gap-1 text-xs text-fg-muted">
-              <span className="font-medium">{ABILITY_LABELS[key]}</span>
+              <span className="font-medium">{t.character.abilities[key]}</span>
               <Input
-                aria-label={ABILITY_LABELS[key]}
+                aria-label={t.character.abilities[key]}
                 type="number"
                 min={1}
                 max={30}
@@ -161,7 +159,7 @@ export function CharacterCreationForm({
 
       <fieldset className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <legend className="text-sm font-medium text-fg">Inventory</legend>
+          <legend className="text-sm font-medium text-fg">{t.character.inventory}</legend>
           <Button
             variant="ghost"
             size="sm"
@@ -169,16 +167,16 @@ export function CharacterCreationForm({
               setInventory((prev) => [...prev, { name: '', qty: 1 }])
             }
           >
-            Add item
+            {t.character.addItem}
           </Button>
         </div>
         {inventory.map((item, index) => (
           <div key={index} className="flex items-center gap-2">
             <Input
-              aria-label={`Item ${index + 1} name`}
+              aria-label={format(t.character.itemName, { index: index + 1 })}
               type="text"
               value={item.name}
-              placeholder="Longsword"
+              placeholder={t.character.itemPlaceholder}
               onChange={(event) =>
                 setInventory((prev) =>
                   prev.map((row, i) =>
@@ -189,7 +187,7 @@ export function CharacterCreationForm({
               className="flex-1"
             />
             <Input
-              aria-label={`Item ${index + 1} quantity`}
+              aria-label={format(t.character.itemQuantity, { index: index + 1 })}
               type="number"
               min={1}
               value={item.qty}
@@ -206,7 +204,7 @@ export function CharacterCreationForm({
             />
             <button
               type="button"
-              aria-label={`Remove item ${index + 1}`}
+              aria-label={format(t.character.removeItem, { index: index + 1 })}
               onClick={() =>
                 setInventory((prev) => prev.filter((_, i) => i !== index))
               }
@@ -224,7 +222,7 @@ export function CharacterCreationForm({
         </p>
       ) : null}
       <Button type="submit" size="lg" disabled={isSubmitting} className="self-start">
-        {isSubmitting ? 'Saving…' : 'Create character'}
+        {isSubmitting ? t.character.saving : t.character.createCharacter}
       </Button>
     </form>
   );

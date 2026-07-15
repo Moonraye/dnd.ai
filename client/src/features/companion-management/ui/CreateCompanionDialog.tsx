@@ -11,6 +11,7 @@ import {
   Textarea,
 } from '@/shared/ui';
 import { apiFetch } from '@/shared/api/httpClient';
+import { useTranslation } from '@/shared/i18n';
 
 interface CreateCompanionDialogProps {
   isOpen: boolean;
@@ -23,6 +24,7 @@ export function CreateCompanionDialog({
   onOpenChange,
   sessionId,
 }: CreateCompanionDialogProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [persona, setPersona] = useState('');
   const [hpMax, setHpMax] = useState(30);
@@ -50,7 +52,7 @@ export function CreateCompanionDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t.companions.nameRequired);
       return;
     }
     setIsSubmitting(true);
@@ -77,7 +79,7 @@ export function CreateCompanionDialog({
       setStats({ str: 12, dex: 12, con: 12, int: 12, wis: 12, cha: 12 });
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create companion');
+      setError(err instanceof Error ? err.message : t.errors.createCompanionFailed);
     } finally {
       setIsSubmitting(false);
     }
@@ -86,19 +88,19 @@ export function CreateCompanionDialog({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md">
-        <DialogTitle>Forge Custom Companion</DialogTitle>
+        <DialogTitle>{t.companions.createTitle}</DialogTitle>
         <DialogDescription>
-          Summon an AI companion with a custom identity, attributes, and behavior.
+          {t.companions.createDescription}
         </DialogDescription>
         <form onSubmit={handleSubmit} className="mt-4 flex flex-col gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="comp-name" className="text-xs font-medium text-fg-muted">
-              Companion Name
+              {t.companions.nameLabel}
             </label>
             <Input
               id="comp-name"
               type="text"
-              placeholder="e.g. Thorin Oakenshield"
+              placeholder={t.companions.namePlaceholder}
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -107,11 +109,11 @@ export function CreateCompanionDialog({
 
           <div className="flex flex-col gap-1.5">
             <label htmlFor="comp-persona" className="text-xs font-medium text-fg-muted">
-              Behavioral Persona
+              {t.companions.personaLabel}
             </label>
             <Textarea
               id="comp-persona"
-              placeholder="Describe their voice, temperament, backstory, and how they react... (e.g. A proud dwarf who speaks in grumbles and hates elves, but is intensely loyal.)"
+              placeholder={t.companions.personaPlaceholderCreate}
               value={persona}
               onChange={(e) => setPersona(e.target.value)}
               rows={3}
@@ -121,7 +123,7 @@ export function CreateCompanionDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
               <label htmlFor="comp-hp" className="text-xs font-medium text-fg-muted">
-                Max Hit Points
+                {t.companions.maxHitPoints}
               </label>
               <Input
                 id="comp-hp"
@@ -139,7 +141,7 @@ export function CreateCompanionDialog({
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium text-fg-muted">Ability Scores</span>
+            <span className="text-xs font-medium text-fg-muted">{t.companions.abilityScores}</span>
             <div className="grid grid-cols-6 gap-2">
               {(Object.keys(stats) as Array<keyof typeof stats>).map((stat) => (
                 <div key={stat} className="flex flex-col items-center gap-1">
@@ -173,10 +175,10 @@ export function CreateCompanionDialog({
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
             >
-              Cancel
+              {t.companions.cancel}
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Summoning…' : 'Summon Companion'}
+              {isSubmitting ? t.companions.summoning : t.companions.summonCompanion}
             </Button>
           </div>
         </form>

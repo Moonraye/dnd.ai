@@ -8,10 +8,12 @@ import {
 } from '@dnd/shared';
 import { useCallback, useState } from 'react';
 import { getSocket } from '@/shared/api/socketClient';
+import { useTranslation } from '@/shared/i18n';
 
 const SEND_ACK_TIMEOUT_MS = 5000;
 
 export function useSendChat(sessionId: string) {
+  const { t } = useTranslation();
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,13 +51,13 @@ export function useSendChat(sessionId: string) {
         }
         return true;
       } catch {
-        setError('Message could not be sent');
+        setError(t.errors.sendMessageFailed);
         return false;
       } finally {
         setIsSending(false);
       }
     },
-    [sessionId],
+    [sessionId, t],
   );
 
   return { send, isSending, error };

@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
+import { useTranslation } from '@/shared/i18n';
 import {
   Button,
   Dialog,
@@ -14,6 +15,7 @@ import { CreateLobbyForm } from './CreateLobbyForm';
 
 function CreateCampaignDialogInner() {
   const router = useRouter();
+  const { t } = useTranslation();
   const searchParams = useSearchParams();
   const shouldAutoOpen = searchParams.get('create') === '1';
   const [open, setOpen] = useState(shouldAutoOpen);
@@ -25,14 +27,13 @@ function CreateCampaignDialogInner() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>Create campaign</Button>
+        <Button>{t.lobby.createCampaign}</Button>
       </DialogTrigger>
       <DialogContent>
-        <DialogTitle className="font-display">Create a campaign</DialogTitle>
-        <DialogDescription>
-          Name your table. You are its dungeon master until you hand the seat to
-          an AI one.
-        </DialogDescription>
+        <DialogTitle className="font-display">
+          {t.lobby.createDialog.title}
+        </DialogTitle>
+        <DialogDescription>{t.lobby.createDialog.description}</DialogDescription>
         <div className="mt-6">
           <CreateLobbyForm onDone={() => setOpen(false)} />
         </div>
@@ -42,8 +43,10 @@ function CreateCampaignDialogInner() {
 }
 
 export function CreateCampaignDialog() {
+  const { t } = useTranslation();
+
   return (
-    <Suspense fallback={<Button>Create campaign</Button>}>
+    <Suspense fallback={<Button>{t.lobby.createCampaign}</Button>}>
       <CreateCampaignDialogInner />
     </Suspense>
   );

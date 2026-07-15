@@ -6,8 +6,8 @@ import {
   useMyCharacter,
   useUpdateCharacter,
   ABILITY_KEYS,
-  ABILITY_LABELS,
 } from '@/features/character-sheet';
+import { format, useTranslation } from '@/shared/i18n';
 import { Button, HpBar, Input } from '@/shared/ui';
 
 interface CharacterHudProps {
@@ -16,6 +16,7 @@ interface CharacterHudProps {
 
 /** The player's own sheet: identity, HP, ability scores, inventory. */
 export function CharacterHud({ sessionId }: CharacterHudProps) {
+  const { t } = useTranslation();
   const { myCharacter } = useMyCharacter();
   const { update, isSaving, error } = useUpdateCharacter(sessionId);
   const [inventory, setInventory] = useState<
@@ -78,18 +79,18 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           <Button
             variant="secondary"
             size="sm"
-            aria-label="Take damage"
+            aria-label={t.character.takeDamage}
             onClick={() => changeHp(-hpAmount)}
             disabled={isSaving}
           >
-            − Damage
+            − {t.character.damage}
           </Button>
           <div className="flex items-center gap-1">
             <Button
               variant="ghost"
               size="sm"
               className="px-2"
-              aria-label="Decrease HP change amount"
+              aria-label={t.character.decreaseHpAmount}
               onClick={() => stepHpAmount(-1)}
               disabled={isSaving}
             >
@@ -99,7 +100,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
               type="number"
               min={1}
               max={999}
-              aria-label="HP change amount"
+              aria-label={t.character.hpChangeAmount}
               value={hpAmountInput}
               onChange={(event) => setHpAmountInput(event.target.value)}
               onBlur={commitHpAmount}
@@ -109,7 +110,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
               variant="ghost"
               size="sm"
               className="px-2"
-              aria-label="Increase HP change amount"
+              aria-label={t.character.increaseHpAmount}
               onClick={() => stepHpAmount(1)}
               disabled={isSaving}
             >
@@ -119,11 +120,11 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           <Button
             variant="secondary"
             size="sm"
-            aria-label="Heal"
+            aria-label={t.character.heal}
             onClick={() => changeHp(hpAmount)}
             disabled={isSaving}
           >
-            + Heal
+            + {t.character.heal}
           </Button>
         </div>
       </div>
@@ -135,7 +136,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
             className="rounded-md border border-border bg-bg-subtle py-2"
           >
             <div className="text-[0.65rem] font-medium uppercase tracking-wide text-fg-subtle">
-              {ABILITY_LABELS[key]}
+              {t.character.abilities[key]}
             </div>
             <div className="font-mono text-lg tabular-nums text-fg">
               {myCharacter.stats[key]}
@@ -146,7 +147,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-fg">Inventory</span>
+          <span className="text-sm font-medium text-fg">{t.character.inventory}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -157,13 +158,13 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
               ])
             }
           >
-            Add
+            {t.character.add}
           </Button>
         </div>
         {inventory.map((item, index) => (
           <div key={item.client_id} className="flex items-center gap-2">
             <Input
-              aria-label={`Item ${index + 1} name`}
+              aria-label={format(t.character.itemName, { index: index + 1 })}
               type="text"
               value={item.name}
               onChange={(event) =>
@@ -176,7 +177,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
               className="h-9 flex-1"
             />
             <Input
-              aria-label={`Item ${index + 1} quantity`}
+              aria-label={format(t.character.itemQuantity, { index: index + 1 })}
               type="number"
               min={1}
               value={item.qty}
@@ -193,7 +194,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
             />
             <button
               type="button"
-              aria-label={`Remove item ${index + 1}`}
+              aria-label={format(t.character.removeItem, { index: index + 1 })}
               onClick={() =>
                 setInventory((prev) => prev.filter((_, i) => i !== index))
               }
@@ -210,7 +211,7 @@ export function CharacterHud({ sessionId }: CharacterHudProps) {
           disabled={isSaving}
           className="self-start"
         >
-          Save inventory
+          {t.character.saveInventory}
         </Button>
       </div>
 

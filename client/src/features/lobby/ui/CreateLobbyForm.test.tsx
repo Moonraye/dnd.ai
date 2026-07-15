@@ -36,6 +36,7 @@ describe('CreateLobbyForm', () => {
       creatorId: 'user-uuid',
       status: 'LOBBY',
       createdAt: '2026-07-10T12:00:00.000Z',
+      language: 'en',
     });
     const user = userEvent.setup();
     render(<CreateLobbyForm />);
@@ -48,7 +49,39 @@ describe('CreateLobbyForm', () => {
 
     expect(createLobbyMock).toHaveBeenCalledWith({
       title: 'The Sunless Citadel',
+      language: 'en',
     });
     expect(push).toHaveBeenCalledWith('/session/session-uuid');
+  });
+
+  it('defaults the language selector to the current UI language and includes the chosen language in the payload', async () => {
+    createLobbyMock.mockResolvedValue({
+      id: 'session-uuid',
+      title: 'The Sunless Citadel',
+      creatorId: 'user-uuid',
+      status: 'LOBBY',
+      createdAt: '2026-07-10T12:00:00.000Z',
+      language: 'uk',
+    });
+    const user = userEvent.setup();
+    render(<CreateLobbyForm />);
+
+    // Defaults to English (the UI language in tests).
+    expect(screen.getByRole('button', { name: 'English' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Українська' }));
+    await user.type(
+      screen.getByLabelText(/campaign title/i),
+      'The Sunless Citadel',
+    );
+    await user.click(screen.getByRole('button', { name: /create campaign/i }));
+
+    expect(createLobbyMock).toHaveBeenCalledWith({
+      title: 'The Sunless Citadel',
+      language: 'uk',
+    });
   });
 });
