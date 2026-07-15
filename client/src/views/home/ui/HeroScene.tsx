@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useAuthStore } from '@/shared/store/authStore';
 import { buttonVariants } from '@/shared/ui';
 
 // The AI DM's opening read-aloud. Boxed/italic "read-aloud text" is the D&D
@@ -14,6 +15,8 @@ const TYPE_MS = 26;
 
 export function HeroScene() {
   const [typed, setTyped] = useState('');
+  const status = useAuthStore((state) => state.status);
+  const ctaHref = status === 'authenticated' ? '/lobby?create=1' : '/login';
 
   useEffect(() => {
     const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -67,7 +70,7 @@ export function HeroScene() {
 
         <div className="flex flex-col items-center gap-4 sm:flex-row sm:gap-6">
           <Link
-            href="/signup"
+            href={ctaHref}
             className={buttonVariants({ variant: 'primary', size: 'lg' })}
           >
             Start your adventure

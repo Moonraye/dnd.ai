@@ -1,69 +1,65 @@
-# Claude Code Guide for Next.js + NestJS Project
+# Claude Code Guide — Next.js + NestJS Monorepo
 
-This document provides guidance for using Claude Code (claude.ai/code) with this Next.js + NestJS project.
+## Stack
 
-## Tech Stack
+Next.js (App Router, RSC by default), TypeScript strict, Tailwind, Prisma + PostgreSQL,
+NestJS backend, Socket.IO for realtime.
 
-- Next.js with App Router
-- TypeScript for type safety
-- Tailwind CSS for styling
-- React Server Components by default
-- Prisma ORM
-- PostgreSQL Database
-- NestJS for Backend API (Separate folder)
-- Websocket (Socket.IO) for Real-time Collaboration
+## Structure
 
-## Code Structure
-
-This is Monorepo structure:
-├── client/ # Next.js application (using FSD inside /src)
-│ ├── src/
-│ │ ├── app/ # Next.js App Router folders, layout wrappers, and routes
-│ │ ├── views/ # Page-level compositions (e.g., LobbyPage, SessionPage)
-│ │ ├── widgets/ # Major layout pieces (e.g., ChatWindow, CharacterHud)
-│ │ ├── features/ # Interactive features (e.g., DiceRoller, SendMessageField)
-│ │ ├── entities/ # Business domain entities (e.g., CharacterModel, SessionModel)
-│ │ └── shared/ # Core UI kits, Zustand stores, and base HTTP/WS client instances
-├── server/ # NestJS server application
-│ ├── src/
-│ │ ├── auth/ # Custom NestJS guards & strategies to decode Supabase JWTs
-│ │ ├── user/ # User profile and D&D character sheet database management
-│ │ ├── game-session/ # Socket.io Gateway, active session room managers, and dice validation
-│ │ ├── ai/ # AI prompts, Gemini client, and structured JSON parser
-│ │ └── prisma/ # Database module initializing Prisma Client connections
-├── packages/
-│ ├── shared/ # Shared TypeScript models and Zod validation schemas
-│ │ ├── src/
-│ │ │ ├── types.ts # Shared WebSocket events, User, and Session interfaces
-│ │ │ └── validation.ts # Zod schemas (e.g., CreateLobbySchema, CharacterSheetSchema)
+client/src/ app/ → views/ → widgets/ → features/ → entities/ → shared/ (FSD)
+server/src/ auth/ user/ game-session/ ai/ prisma/
+packages/shared/ types.ts, validation.ts (Zod)
 
 ## Conventions
 
-Testing after each feature
+- Server Components by default; `'use client'` only when needed
+- Named exports, functional components, async/await, early returns
+- NestJS: one module per feature; Prisma only — never raw SQL
+- Test after each feature
 
-Use Server Components by default, add 'use client' only when needed
+## Commands
 
-- Prefer named exports for components
-- Use TypeScript strict mode
-- Follow the Next.js file-based routing conventions
-- Use next/image for optimized images
-- Use next/link for client-side navigation
-- Use NestJS modules for each feature
-- In Backend API, use Prisma models and migrations for database operations, never use raw SQL queries.
+- Client: `npm run dev` / `npm run build`
+- Backend: `npm run start:dev` / `npx prisma generate`
 
-## Code Style
+# Orchestration strategy
 
-- Use functional components with TypeScript
-- Prefer async/await over .then() chains
-- Use early returns for cleaner code
-- Keep components small and focused
+You are the orchestrator. Plan, delegate to the right worker, review results.
+Don't implement large chunks yourself — **but only delegate when it's worth the cost.**
 
-## Commands (client root)
+### When to delegate vs. do it yourself
 
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
+Each worker dispatch costs a full fresh context load (~20-30k tokens) since
+workers don't share your context. Delegation only pays off when parallelism
+or context isolation offsets that cost.
 
-## Commands (backend root)
+**Do it yourself directly, no delegation:**
 
-- `npm run start:dev` - Start development server
-- `npx prisma generate` - Generate Prisma Client
+- Single-file or single-module change
+- Task touches only one layer (client OR server, not both)
+- Bug fixes, small refactors, copy/config changes
+- Anything you could finish by reading ≤2-3 files
+- Any task where you're not sure it's complex enough — default to doing it yourself
+
+**Delegate to workers:**
+
+- Task genuinely spans client + server + needs independent parallel work
+  (e.g. new feature requiring API + UI + schema changes)
+- Task is large enough that one context window can't hold it (big migration,
+  multi-module refactor)
+- You need isolated verification (qa-worker reviewing someone else's work)
+
+If unsure, ask yourself: "Would splitting this into workers finish faster/
+cleaner than just doing it in this session?" If no — don't delegate.
+
+**Workers:** `nextjs-worker` (client/) · `nestjs-worker` (server/) · `qa-worker` (tests, only after implementation, and only if delegation was used above)
+
+### Delegation rules (when delegating)
+
+1. Split the request into the smallest independent subtasks.
+2. Run nextjs-worker + nestjs-worker in parallel when they don't depend on each other.
+3. Run qa-worker only after implementation workers finish.
+4. Give each worker a self-contained prompt — file paths, constraints.
+5. If a result looks off, send it back with specific feedback.
+6. Report each worker's outcome in 1-3 sentences, not full transcripts.
