@@ -12,17 +12,19 @@ DunDrAI is a real-time web platform for playing Dungeons & Dragons, supporting c
 | Auth | Supabase Auth (JWT, verified server-side) |
 | AI | Google Gemini via `@google/genai` |
 | Validation | Zod schemas shared between client and server (`@dnd/shared`) |
+| Localization | Custom i18n (English/Ukrainian), client language switch + per-campaign AI DM language pin |
 
 ## Repository Layout
 
 ```
 ├── client/            # Next.js app (Feature-Sliced Design in src/)
 │   └── src/
-│       ├── app/       # App Router routes and layouts
+│       ├── app/       # App Router routes (thin, delegate to views/)
+│       ├── views/     # Page-level UI (HomePage, LobbyPage, SessionPage)
 │       ├── widgets/   # Major layout pieces (Header, CharacterHUD, ...)
-│       ├── features/  # Interactive features (auth, DiceRoller, ...)
+│       ├── features/  # Interactive features (auth, DiceRoller, language, ...)
 │       ├── entities/  # Business domain entities
-│       └── shared/    # Supabase client, Zustand stores, UI kit
+│       └── shared/    # Supabase client, Zustand stores, i18n dictionaries, UI kit
 ├── server/            # NestJS API + WebSocket gateway
 │   ├── prisma/        # Prisma schema and migrations
 │   └── src/
@@ -92,7 +94,9 @@ cd client && npm test && npm run lint
 ## Data Model
 
 Five Prisma models back the platform (see `server/prisma/schema.prisma`):
-`User` (mirrors Supabase Auth identities, lazily created), `CampaignSession`,
+`User` (mirrors Supabase Auth identities, lazily created), `CampaignSession`
+(includes a `language` field, chosen at lobby creation and immutable, that
+pins the AI DM's replies to English or Ukrainian for the whole campaign),
 `CharacterSheet` (JSON stats/inventory, optional `aiProvider`/`aiModel` for
 AI-controlled characters), `ChatMessage`, and `GameStateLog` (one-to-one AI
 campaign memory per session).
@@ -108,6 +112,7 @@ DTO classes via `nestjs-zod` with a global `ZodValidationPipe`.
 
 ## Roadmap
 
-See [ROADMAP.md](./ROADMAP.md) for implementation phases (Phases 0-2 complete:
-foundation, auth, core data models) and [project-plan.md](./project-plan.md)
-for full architectural detail and ADRs.
+See [ROADMAP.md](./ROADMAP.md) for implementation phases (Phases 0-5 complete:
+foundation, auth, core data models, real-time backbone, character sheets/dice,
+AI orchestration — Phase 6 deployment/ops up next) and
+[project-plan.md](./project-plan.md) for full architectural detail and ADRs.
