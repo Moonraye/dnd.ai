@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { useTranslation } from '@/shared/i18n';
 import { useAuthStore } from '@/shared/store/authStore';
+import { useServerStatusStore } from '@/shared/store/serverStatusStore';
 import { buttonVariants } from '@/shared/ui';
 
 // The AI DM's opening read-aloud. Boxed/italic "read-aloud text" is the D&D
@@ -37,6 +38,13 @@ export function HeroScene() {
     // Re-run the typewriter whenever the active language (and thus the
     // narration text) changes, not just on mount.
   }, [openingScene]);
+
+  useEffect(() => {
+    // ADR 7: warm the Render backend and record whether it's awake, so a
+    // later lobby-entry attempt can skip straight to the wait room instead
+    // of discovering the cold start there.
+    void useServerStatusStore.getState().checkHealth();
+  }, []);
 
   return (
     <main className="relative flex flex-1 flex-col items-center justify-center overflow-hidden px-6 py-16">

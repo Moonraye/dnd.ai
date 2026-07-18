@@ -5,16 +5,28 @@ import { useEffect } from 'react';
 import { CreateCampaignDialog, LobbyList } from '@/features/lobby';
 import { useTranslation } from '@/shared/i18n';
 import { useAuthStore } from '@/shared/store/authStore';
+import { useServerStatusStore } from '@/shared/store/serverStatusStore';
 import { Header } from '@/widgets/header';
 
 export function LobbyPage() {
   const router = useRouter();
   const { t } = useTranslation();
   const status = useAuthStore((state) => state.status);
+  const serverStatus = useServerStatusStore((state) => state.status);
 
   useEffect(() => {
     if (status === 'unauthenticated') router.push('/login');
   }, [status, router]);
+
+  useEffect(() => {
+    // ADR 7: a deep-linked/bookmarked visit may land here without ever
+    // hitting the home page's wake-up ping, so check for ourselves.
+    if (serverStatus === 'unknown') {
+      void useServerStatusStore.getState().checkHealth();
+    } else if (serverStatus === 'asleep') {
+      router.push('/waking-up?next=/lobby');
+    }
+  }, [serverStatus, router]);
 
   if (status === 'loading') {
     return (

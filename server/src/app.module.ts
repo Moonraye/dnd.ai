@@ -8,6 +8,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { GameSessionModule } from './game-session/game-session.module';
+import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { UserModule } from './user/user.module';
 
@@ -31,6 +32,7 @@ import { UserModule } from './user/user.module';
     AuthModule,
     GameSessionModule,
     AiModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [
