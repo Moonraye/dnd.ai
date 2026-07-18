@@ -27,6 +27,13 @@ export const en = {
     signIn: 'Sign in',
     signUp: 'Sign up',
   },
+  wakingUp: {
+    title: 'Waking up the Tavern',
+    subtitle:
+      'The dungeon master is lighting the candles. This can take about a minute — hang tight.',
+    timedOut: 'This is taking longer than usual.',
+    retry: 'Try again',
+  },
   home: {
     badge: 'AI dungeon master · Live table',
     openingScene:

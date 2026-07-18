@@ -18,6 +18,7 @@
     "build": "npm run build -w packages/shared && npm run build --workspaces --if-present",
     "test:client": "npm run test -w client",
     "test:server": "npm run test -w server",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint:ci -w server && npm run lint -w client"
   }
 }
