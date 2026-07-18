@@ -1,0 +1,129 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Mirrors Supabase Auth identities; rows are lazily created on first
+// authenticated request (ADR 8), so id comes from the Supabase JWT `sub`.
+model User {
+  id        String   @id @db.Uuid
+  email     String?  @unique
+  username  String?
+  createdAt DateTime @default(now())
+
+  campaignSessions CampaignSession[]
+  characterSheets  CharacterSheet[]  @relation("CharacterUser")
+  ownedCharacters  CharacterSheet[]  @relation("CharacterOwner")
+  sessionMembers   SessionMember[]
+}
+
+enum SessionStatus {
+  LOBBY
+  ACTIVE
+  COMPLETED
+}
+
+enum SenderType {
+  HUMAN
+  AI_DM
+  AI_PLAYER
+  SYSTEM
+}
+
+enum ChatVisibility {
+  PUBLIC
+  WHISPER
+}
+
+model CampaignSession {
+  id        String        @id @default(uuid()) @db.Uuid
+  title     String
+  creatorId String        @db.Uuid
+  creator   User          @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  status    SessionStatus @default(LOBBY)
+  // Chosen once at lobby creation and immutable thereafter (mirrors
+  // packages/shared Language); the AI DM turn always responds in this
+  // language for the whole campaign.
+  language  String        @default("en")
+  createdAt DateTime      @default(now())
+
+  characterSheets CharacterSheet[]
+  chatMessages    ChatMessage[]
+  gameStateLog    GameStateLog?
+  sessionMembers  SessionMember[]
+
+  @@index([creatorId])
+}
+
+model CharacterSheet {
+  id         String          @id @default(uuid()) @db.Uuid
+  userId     String?         @db.Uuid
+  user       User?           @relation("CharacterUser", fields: [userId], references: [id], onDelete: Cascade)
+  ownerId    String?         @db.Uuid
+  owner      User?           @relation("CharacterOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  sessionId  String          @db.Uuid
+  session    CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  name       String
+  hpCurrent  Int
+  hpMax      Int
+  stats      Json
+  inventory  Json            @default("[]")
+  aiProvider String? // ADR 4: e.g. "google"; null = human-controlled
+  aiModel    String? // ADR 4: e.g. "gemini-2.5-flash"
+  persona    String?
+
+  @@unique([userId, sessionId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([ownerId])
+}
+
+model ChatMessage {
+  id                   String          @id @default(uuid()) @db.Uuid
+  sessionId            String          @db.Uuid
+  session              CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  senderType           SenderType
+  senderName           String
+  messageText          String
+  // Structured dice-roll payload on SYSTEM messages; null for plain chat.
+  metadata             Json?
+  visibility           ChatVisibility  @default(PUBLIC)
+  senderUserId         String?         @db.Uuid
+  senderCharacterId    String?         @db.Uuid
+  recipientUserId      String?         @db.Uuid
+  recipientCharacterId String?         @db.Uuid
+  recipientName        String?
+  createdAt   DateTime        @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+// One-to-one with CampaignSession (ADR 4: AI campaign memory).
+model GameStateLog {
+  id               String          @id @default(uuid()) @db.Uuid
+  sessionId        String          @unique @db.Uuid
+  session          CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  activeQuests     Json            @default("[]")
+  npcRelationships Json            @default("{}")
+  campaignSummary  Json            @default("{}")
+  // Append-only ledger of immutable canon (names, deaths, promises, places).
+  keyFacts         Json            @default("[]")
+  updatedAt        DateTime        @updatedAt
+}
+
+model SessionMember {
+  id        String          @id @default(uuid()) @db.Uuid
+  userId    String          @db.Uuid
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessionId String          @db.Uuid
+  session   CampaignSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
+
+  @@unique([userId, sessionId])
+  @@index([sessionId])
+}

@@ -1,0 +1,36 @@
+import type { z } from 'zod';
+import type {
+  SessionStatusSchema,
+  SenderTypeSchema,
+  CreateLobbySchema,
+  AbilityScoresSchema,
+  InventoryItemSchema,
+  CharacterSheetSchema,
+  SendChatMessageSchema,
+  UpdateCharacterSheetSchema,
+  EditCharacterSheetSchema,
+  GenerateCharacterDraftSchema,
+  AiStateUpdateSchema,
+  AiResponseSchema,
+  ChatVisibilitySchema,
+} from './validation';
+
+export type SessionStatus = z.infer<typeof SessionStatusSchema>;
+export type SenderType = z.infer<typeof SenderTypeSchema>;
+export type CreateLobbyInput = z.infer<typeof CreateLobbySchema>;
+export type AbilityScores = z.infer<typeof AbilityScoresSchema>;
+export type InventoryItem = z.infer<typeof InventoryItemSchema>;
+export type CharacterSheetInput = z.infer<typeof CharacterSheetSchema>;
+export type SendChatMessageInput = z.infer<typeof SendChatMessageSchema>;
+export type UpdateCharacterSheetInput = z.infer<
+  typeof UpdateCharacterSheetSchema
+>;
+export type EditCharacterSheetInput = z.infer<
+  typeof EditCharacterSheetSchema
+>;
+export type GenerateCharacterDraftInput = z.infer<
+  typeof GenerateCharacterDraftSchema
+>;
+export type AiStateUpdate = z.infer<typeof AiStateUpdateSchema>;
+export type AiResponse = z.infer<typeof AiResponseSchema>;
+export type ChatVisibility = z.infer<typeof ChatVisibilitySchema>;
